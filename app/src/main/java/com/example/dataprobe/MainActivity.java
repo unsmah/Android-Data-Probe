@@ -19,7 +19,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
-import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -290,10 +289,10 @@ public class MainActivity extends AppCompatActivity {
         private void pushWifiResults() {
             if (wifiScanReceiver == null) return;
             try {
-                List<ScanResult> results = wifiManager.getScanResults();
+                List<android.net.wifi.ScanResult> results = wifiManager.getScanResults();
                 JSONArray arr = new JSONArray();
                 if (results != null) {
-                    for (ScanResult r : results) {
+                    for (android.net.wifi.ScanResult r : results) {
                         JSONObject o = new JSONObject();
                         o.put("SSID", r.SSID);
                         o.put("BSSID", r.BSSID);
