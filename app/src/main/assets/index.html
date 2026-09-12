@@ -4,30 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Native Data Probe</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:18px; padding-bottom:60px; }
   h1 { font-size:20px; color:#a8b2ff; margin-bottom:8px; }
-  h2 { font-size:15px; color:#7c8cff; border-bottom:1px solid #1f2430;
-       padding-bottom:5px; margin-top:28px; }
+  h2 { font-size:15px; color:#7c8cff; border-bottom:1px solid #1f2430; padding-bottom:5px; margin-top:28px; }
   h3 { font-size:13px; color:#8b93a5; margin-top:18px; margin-bottom:8px; }
   dl { display:grid; grid-template-columns: 40% 1fr; gap:6px 14px; font-size:13px; }
   dt { color:#8b93a5; }
   dd { font-family: monospace; word-break: break-all; margin:0; }
-  pre { font-size:11.5px; max-height:260px; overflow:auto; background:#12151f;
-        padding:12px; border-radius:8px; margin:0; line-height:1.55;
-        white-space:pre-wrap; word-break:break-all; }
+  dd a { color:#7c8cff; text-decoration:none; }
+  dd a:hover { text-decoration:underline; }
   button { font:inherit; font-size:13px; padding:9px 14px; border-radius:8px;
            border:1px solid #2c3346; background:#171b26; color:#e6e8ee;
            cursor:pointer; margin:0 6px 8px 0; }
   button:active { background:#232a3a; }
+  button:disabled { opacity:0.6; cursor:wait; }
   button.primary { background:#1e2c4a; border-color:#2f4a7a; color:#cfe0ff; }
+  button.danger { background:#2a1216; border-color:#5a1e24; color:#f08c8c; }
 
-  .permbar {
-    position:sticky; top:0; z-index:10;
+  .permbar { position:sticky; top:0; z-index:10;
     background:#2a1a12; border:1px solid #5a3a1a; color:#f5c76e;
-    padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:13.5px;
-    display:none;
-  }
+    padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:13.5px; display:none; }
   .permbar.show { display:block; }
   .permbar .row { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
   .permbar button { background:#3a2412; border-color:#5a3a1a; color:#f5c76e;
@@ -35,48 +33,41 @@
 
   .item { background:#12151f; border:1px solid #1f2430; border-radius:10px;
           margin-bottom:8px; overflow:hidden; }
-  .item > summary {
-    list-style:none; cursor:pointer; padding:11px 14px;
-    display:flex; justify-content:space-between; align-items:center; gap:10px;
-    font-size:13.5px;
-  }
+  .item > summary { list-style:none; cursor:pointer; padding:11px 14px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:13.5px; }
   .item > summary::-webkit-details-marker { display:none; }
   .item > summary .name { font-weight:600; word-break:break-word; }
   .item > summary .meta { color:#8b93a5; font-size:12px; font-family:monospace; flex-shrink:0; }
   .item[open] > summary { background:#181d28; }
-  .item .body {
-    padding:10px 14px 13px; border-top:1px solid #1f2430;
+  .item .body { padding:10px 14px 13px; border-top:1px solid #1f2430;
     font-size:12.5px; font-family:monospace; color:#b8c1d4;
-    white-space:pre-wrap; word-break:break-all; line-height:1.6;
-  }
+    white-space:pre-wrap; word-break:break-all; line-height:1.6; }
   .empty { color:#6b7488; font-size:12.5px; padding:10px 0; }
 
-  /* App grid */
-  .app-grid {
-    display:grid;
+  .app-grid { display:grid;
     grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-    gap:14px 10px;
-    margin-top:6px;
-  }
-  .app-tile {
-    display:flex; flex-direction:column; align-items:center; text-align:center;
-    gap:6px;
-  }
-  .app-tile img {
-    width:48px; height:48px; border-radius:12px;
-    background:#1b202c; border:1px solid #232a3a;
-    object-fit:contain;
-  }
-  .app-tile .fallback {
-    width:48px; height:48px; border-radius:12px;
+    gap:14px 10px; margin-top:6px; }
+  .app-tile { display:flex; flex-direction:column; align-items:center;
+    text-align:center; gap:6px; }
+  .app-tile img { width:48px; height:48px; border-radius:12px;
+    background:#1b202c; border:1px solid #232a3a; object-fit:contain; }
+  .app-tile .fallback { width:48px; height:48px; border-radius:12px;
     background:#232a3a; border:1px solid #2c3346;
     display:flex; align-items:center; justify-content:center;
-    font-size:20px; font-weight:700; color:#7c8cff;
-  }
-  .app-tile .label {
-    font-size:11px; line-height:1.25; color:#c8cfe0;
-    word-break:break-word; max-width:100%;
-  }
+    font-size:20px; font-weight:700; color:#7c8cff; }
+  .app-tile .label { font-size:11px; line-height:1.25; color:#c8cfe0;
+    word-break:break-word; max-width:100%; }
+
+  #map { height:320px; border-radius:12px; overflow:hidden; background:#12151f;
+         border:1px solid #1f2430; }
+  #historyList { max-height:280px; overflow:auto; margin-top:6px; }
+  .hist-item { font-size:11.5px; font-family:monospace; color:#b8c1d4;
+    padding:6px 10px; border-bottom:1px solid #1a1f2a; }
+  .hist-item:last-child { border-bottom:none; }
+  .hist-item a { color:#7c8cff; text-decoration:none; }
+  .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#4ade80; margin-right:6px; animation:pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 </style>
 </head>
 <body>
@@ -114,11 +105,30 @@
 <div id="btList"></div>
 
 <h2>Location</h2>
+<h3>Last known fix</h3>
 <dl id="location"></dl>
+<button onclick="openInMaps()" id="btnMaps" disabled>Open in Google Maps</button>
+<button onclick="toggleLiveTracking()" id="btnLiveTrack" class="primary">Start live tracking</button>
+<button onclick="refreshMap()">Refresh map</button>
+
+<h3>Live map <span id="liveIndicator" style="display:none; font-size:12px; color:#4ade80;">
+  <span class="live-dot"></span>live</span></h3>
+<div id="map"></div>
+
+<h3>History <span id="histCount" style="font-size:12px; color:#6b7488; font-weight:400;"></span></h3>
+<div id="historyList"></div>
+<button onclick="clearHistory()" class="danger">Clear history</button>
 
 <h2>Installed Apps <span id="appCount" style="font-size:12px; color:#6b7488; font-weight:400;"></span></h2>
+<button id="btnLoadApps" class="primary" onclick="loadApps()">Show installed applications</button>
+<div id="appFilter" style="display:none; margin-bottom:10px;">
+  <button onclick="filterApps('user')" data-f="user">User apps</button>
+  <button onclick="filterApps('system')" data-f="system">System apps</button>
+  <button onclick="filterApps('all')" data-f="all">All</button>
+</div>
 <div class="app-grid" id="apps"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const $ = id => document.getElementById(id);
 
@@ -137,8 +147,14 @@
     for (const [k, v] of Object.entries(data)) {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd");
-      dd.textContent = (v && typeof v === 'object') ? JSON.stringify(v) : v;
-      if (k === "error") dd.style.color = "#f5c76e";
+      if (k === "MapsUrl" && typeof v === "string") {
+        const a = document.createElement("a");
+        a.href = v; a.target = "_blank"; a.textContent = "Open in Google Maps →";
+        dd.appendChild(a);
+      } else {
+        dd.textContent = (v && typeof v === 'object') ? JSON.stringify(v) : v;
+        if (k === "error") dd.style.color = "#f5c76e";
+      }
       el.append(dt, dd);
     }
   };
@@ -151,33 +167,27 @@
   render("wifi", JSON.parse(Android.getWifiInfo()));
   render("location", JSON.parse(Android.getLocation()));
   refreshBondedDevices(JSON.parse(Android.getBluetoothBondedDevices()));
-  loadApps();
+  updateMapsButton();
 
   /* ============ permissions banner ============ */
   const permBar = $("permBar");
-
   window.onPermissionsChanged = function (allGranted, locOn, btOn, wifiOn) {
-    const needsPerms = !allGranted;
-    const needsLoc = allGranted && !locOn;
-    const needsBt = allGranted && !btOn;
-    const needsWifi = allGranted && !wifiOn;
-
-    if (!needsPerms && !needsLoc && !needsBt && !needsWifi) {
+    const needs = { perms: !allGranted, loc: allGranted && !locOn,
+                    bt: allGranted && !btOn, wifi: allGranted && !wifiOn };
+    if (!needs.perms && !needs.loc && !needs.bt && !needs.wifi) {
       permBar.classList.remove("show"); return;
     }
     permBar.classList.add("show");
-
     const parts = [];
-    if (needsPerms) parts.push("permissions");
-    if (needsLoc) parts.push("location");
-    if (needsBt) parts.push("Bluetooth");
-    if (needsWifi) parts.push("Wi-Fi");
+    if (needs.perms) parts.push("permissions");
+    if (needs.loc) parts.push("location");
+    if (needs.bt) parts.push("Bluetooth");
+    if (needs.wifi) parts.push("Wi-Fi");
     $("permMsg").textContent = "Turn on to gather full data: " + parts.join(", ");
-
-    $("btnPerms").style.display = needsPerms ? "" : "none";
-    $("btnLoc").style.display = needsLoc ? "" : "none";
-    $("btnBt").style.display = needsBt ? "" : "none";
-    $("btnWifi").style.display = needsWifi ? "" : "none";
+    $("btnPerms").style.display = needs.perms ? "" : "none";
+    $("btnLoc").style.display = needs.loc ? "" : "none";
+    $("btnBt").style.display = needs.bt ? "" : "none";
+    $("btnWifi").style.display = needs.wifi ? "" : "none";
   };
 
   $("btnPerms").onclick = () => Android.requestPermissionsFromUi();
@@ -191,26 +201,18 @@
       st.bluetoothEnabled, st.wifiEnabled);
   })();
 
-  /* ============ live-update callbacks from Java ============ */
-  window.onWifiInfoUpdated = function (info) {
-    render("wifi", info);
-  };
-
-  window.onBondedDevicesUpdated = function (list) {
-    refreshBondedDevices(list);
-  };
-
-  window.onLocationUpdated = function (loc) {
-    render("location", loc);
-  };
-
-  window.onLocationStateChanged = function (on) {
+  /* ============ live-update callbacks ============ */
+  window.onWifiInfoUpdated = info => render("wifi", info);
+  window.onBondedDevicesUpdated = list => refreshBondedDevices(list);
+  window.onLocationUpdated = loc => { render("location", loc); updateMapsButton(); };
+  window.onLocationStateChanged = on => {
     const st = JSON.parse(Android.getPermissionStatus());
     window.onPermissionsChanged(st.allGranted, on, st.bluetoothEnabled, st.wifiEnabled);
-    render("location", JSON.parse(Android.getLocation()));
+    const loc = JSON.parse(Android.getLocation());
+    render("location", loc); updateMapsButton();
   };
 
-  /* ============ Wi-Fi live scan ============ */
+  /* ============ Wi-Fi ============ */
   window.startWifiScan = function () {
     $("wifiList").innerHTML = '<div class="empty">Scanning…</div>';
     Android.startWifiScan();
@@ -225,34 +227,29 @@
     results.sort((a, b) => b.Level - a.Level);
     $("wifiList").innerHTML = results.map(n => {
       const name = n.SSID || "(hidden network)";
-      return itemHTML(
-        name,
-        `${n.Level}dBm`,
+      return itemHTML(name, `${n.Level}dBm`,
         `SSID:         ${name}\n` +
         `BSSID:        ${n.BSSID}\n` +
         `Signal:       ${n.Level} dBm\n` +
         `Frequency:    ${n.Frequency} MHz  (${freqBand(n.Frequency)})\n` +
-        `Capabilities: ${n.Capabilities || "(open network)"}`
-      );
+        `Capabilities: ${n.Capabilities || "(open network)"}`);
     }).join("");
   };
 
-  window.onWifiScanError = function (msg) {
+  window.onWifiScanError = msg => {
     $("wifiList").innerHTML = '<div class="empty">Scan error: ' + escapeHtml(msg) + '</div>';
   };
 
   /* ============ Bluetooth ============ */
   function refreshBondedDevices(list) {
     $("btPaired").innerHTML = list.length
-      ? list.map(d => itemHTML(
-          d.Name, d.Address,
+      ? list.map(d => itemHTML(d.Name, d.Address,
           `Address:  ${d.Address}\nType:     ${deviceTypeLabel(d.Type)}\nPaired:   yes`
         )).join("")
       : '<div class="empty">No paired devices. Turn on Bluetooth to see them.</div>';
   }
 
   const btSeen = new Set();
-
   window.startBtScan = function () {
     btSeen.clear();
     $("btList").innerHTML = '<div class="empty">Scanning…</div>';
@@ -263,16 +260,13 @@
     if (btSeen.has(d.Address)) return;
     btSeen.add(d.Address);
     if (btSeen.size === 1) $("btList").innerHTML = "";
-    $("btList").insertAdjacentHTML("beforeend", itemHTML(
-      d.Name,
-      `${d.RSSI}dBm`,
+    $("btList").insertAdjacentHTML("beforeend", itemHTML(d.Name, `${d.RSSI}dBm`,
       `Name:     ${d.Name}\n` +
       `Address:  ${d.Address}\n` +
       `RSSI:     ${d.RSSI} dBm\n` +
       `Type:     ${deviceTypeLabel(d.Type)}\n` +
       `Paired:   ${d.Bonded ? "yes" : "no"}\n` +
-      `Source:   ${d.Source === "ble" ? "BLE advertisement" : "Classic discovery"}`
-    ));
+      `Source:   ${d.Source === "ble" ? "BLE advertisement" : "Classic discovery"}`));
   };
 
   window.onBluetoothScanComplete = function () {
@@ -284,34 +278,214 @@
         (btSeen.size === 1 ? "" : "s") + ') —</div>');
   };
 
-  window.onBluetoothError = function (msg) {
+  window.onBluetoothError = msg => {
     $("btList").innerHTML = '<div class="empty">Error: ' + escapeHtml(msg) + '</div>';
   };
 
-  /* ============ Installed apps grid ============ */
-  function loadApps() {
-    const apps = JSON.parse(Android.getInstalledApps());
-    $("appCount").textContent = "(" + apps.length + " apps)";
-    const grid = $("apps");
-    grid.innerHTML = apps.map(a => {
+  /* ============ Location ============ */
+  let currentLat = null, currentLon = null;
+
+  function updateMapsButton() {
+    const loc = JSON.parse(Android.getLocation());
+    if (loc && typeof loc.Latitude === "number") {
+      currentLat = loc.Latitude; currentLon = loc.Longitude;
+      $("btnMaps").disabled = false;
+    } else {
+      $("btnMaps").disabled = true;
+    }
+  }
+
+  window.openInMaps = function () {
+    if (currentLat == null) return;
+    window.open("https://www.google.com/maps?q=" + currentLat + "," + currentLon, "_blank");
+  };
+  // expose as global for the button
+  window.openInMaps = window.openInMaps;
+  document.getElementById("btnMaps").onclick = window.openInMaps;
+
+  /* ============ Leaflet map ============ */
+  let map = null, marker = null, trail = null, trailPoints = [];
+
+  function initMap() {
+    if (map) return;
+    map = L.map("map", { zoomControl: true, attributionControl: true }).setView([0, 0], 2);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+    trail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.85 }).addTo(map);
+    marker = L.circleMarker([0, 0], {
+      radius: 9, color: "#7c8cff", fillColor: "#7c8cff",
+      fillOpacity: 0.9, weight: 3
+    }).addTo(map);
+    map.setView([0, 0], 2);
+  }
+
+  window.refreshMap = function () {
+    initMap();
+    setTimeout(() => map.invalidateSize(), 100);
+    const hist = JSON.parse(Android.getLocationHistory());
+    drawHistory(hist);
+    if (hist.length) {
+      const last = hist[hist.length - 1];
+      map.setView([last.lat, last.lon], Math.max(map.getZoom(), 15));
+      marker.setLatLng([last.lat, last.lon]);
+    }
+  };
+
+  function drawHistory(hist) {
+    if (!map) return;
+    trailPoints = hist.map(p => [p.lat, p.lon]);
+    trail.setLatLngs(trailPoints);
+    $("histCount").textContent = hist.length ? `(${hist.length} points)` : "";
+    if (!hist.length) {
+      $("historyList").innerHTML = '<div class="empty">No saved points yet. Start live tracking.</div>';
+      return;
+    }
+    const recent = hist.slice(-20).reverse();
+    $("historyList").innerHTML = recent.map(p => {
+      const t = new Date(p.t).toLocaleString();
+      const url = `https://www.google.com/maps?q=${p.lat},${p.lon}`;
+      return `<div class="hist-item">` +
+        `<a href="${url}" target="_blank">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</a>` +
+        `  ±${Math.round(p.acc || 0)}m  ·  ${t}</div>`;
+    }).join("");
+  }
+
+  /* ============ Live tracking ============ */
+  let tracking = false;
+
+  window.toggleLiveTracking = function () {
+    if (tracking) {
+      Android.stopLiveTracking();
+    } else {
+      initMap();
+      setTimeout(() => map.invalidateSize(), 100);
+      Android.startLiveTracking();
+    }
+  };
+
+  window.onLiveLocationStarted = function () {
+    tracking = true;
+    $("btnLiveTrack").textContent = "Stop live tracking";
+    $("btnLiveTrack").classList.remove("primary");
+    $("btnLiveTrack").classList.add("danger");
+    $("liveIndicator").style.display = "inline";
+  };
+
+  window.onLiveLocationStopped = function () {
+    tracking = false;
+    $("btnLiveTrack").textContent = "Start live tracking";
+    $("btnLiveTrack").classList.remove("danger");
+    $("btnLiveTrack").classList.add("primary");
+    $("liveIndicator").style.display = "none";
+  };
+
+  window.onLiveLocationError = msg => {
+    $("liveIndicator").style.display = "none";
+    tracking = false;
+    $("btnLiveTrack").textContent = "Start live tracking";
+    $("btnLiveTrack").classList.remove("danger");
+    $("btnLiveTrack").classList.add("primary");
+    alert("Live tracking error: " + msg);
+  };
+
+  window.onLiveLocationUpdate = function (loc) {
+    if (!map) initMap();
+    marker.setLatLng([loc.Latitude, loc.Longitude]);
+    trailPoints.push([loc.Latitude, loc.Longitude]);
+    trail.setLatLngs(trailPoints);
+    map.setView([loc.Latitude, loc.Longitude], Math.max(map.getZoom(), 16));
+
+    // Update the top location card too
+    render("location", {
+      Latitude: loc.Latitude,
+      Longitude: loc.Longitude,
+      Accuracy: loc.Accuracy,
+      Altitude: loc.Altitude,
+      Speed: loc.Speed,
+      MapsUrl: `https://www.google.com/maps?q=${loc.Latitude},${loc.Longitude}`
+    });
+    currentLat = loc.Latitude; currentLon = loc.Longitude;
+    $("btnMaps").disabled = false;
+
+    // Refresh history list occasionally (every 5th point)
+    if (trailPoints.length % 5 === 0) {
+      drawHistory(JSON.parse(Android.getLocationHistory()));
+    }
+  };
+
+  window.clearHistory = function () {
+    if (!confirm("Clear all saved location history?")) return;
+    Android.clearLocationHistory();
+    trailPoints = [];
+    if (trail) trail.setLatLngs([]);
+    drawHistory([]);
+  };
+
+  /* ============ Installed apps (lazy) ============ */
+  let appsCache = null;      // current session cache
+  let currentFilter = "all";
+
+  window.loadApps = function () {
+    if (appsCache) {
+      renderApps(appsCache, currentFilter);
+      $("btnLoadApps").style.display = "none";
+      $("appFilter").style.display = "";
+      return;
+    }
+    const btn = $("btnLoadApps");
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    // Give the browser a frame to paint the loading state before the
+    // synchronous Java call blocks the JS thread.
+    setTimeout(() => {
+      try {
+        appsCache = JSON.parse(Android.getInstalledApps("all"));
+        renderApps(appsCache, currentFilter);
+        btn.style.display = "none";
+        $("appFilter").style.display = "";
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Retry loading apps";
+        alert("Failed to load apps: " + e.message);
+      }
+    }, 60);
+  };
+
+  window.filterApps = function (f) {
+    currentFilter = f;
+    // mark active
+    document.querySelectorAll("#appFilter button").forEach(b => {
+      b.classList.toggle("primary", b.dataset.f === f);
+    });
+    renderApps(appsCache || [], f);
+  };
+
+  function renderApps(apps, filter) {
+    const filtered = apps.filter(a => filter === "all" || a.Type === filter);
+    $("appCount").textContent = `(${filtered.length}${filter === "all" ? "" : " " + filter})`;
+    $("apps").innerHTML = filtered.map(a => {
       const icon = a.Icon
         ? `<img src="${a.Icon}" alt="">`
         : `<div class="fallback">${escapeHtml((a.Name[0] || "?").toUpperCase())}</div>`;
-      return `<div class="app-tile" title="${escapeHtml(a.Package)}">${icon}<div class="label">${escapeHtml(a.Name)}</div></div>`;
+      return `<div class="app-tile" title="${escapeHtml(a.Package)}">${icon}` +
+             `<div class="label">${escapeHtml(a.Name)}</div></div>`;
     }).join("");
+    // Mark default filter as active
+    if (filter === "all") {
+      document.querySelectorAll("#appFilter button").forEach(b => {
+        b.classList.toggle("primary", b.dataset.f === "all");
+      });
+    }
   }
 
   /* ============ helpers ============ */
   function itemHTML(name, meta, details) {
-    return (
-      '<details class="item">' +
-        '<summary>' +
-          '<span class="name">' + escapeHtml(name) + '</span>' +
-          '<span class="meta">' + escapeHtml(meta) + '</span>' +
-        '</summary>' +
-        '<div class="body">' + escapeHtml(details) + '</div>' +
-      '</details>'
-    );
+    return ('<details class="item">' +
+      '<summary><span class="name">' + escapeHtml(name) + '</span>' +
+      '<span class="meta">' + escapeHtml(meta) + '</span></summary>' +
+      '<div class="body">' + escapeHtml(details) + '</div></details>');
   }
 
   function escapeHtml(s) {
@@ -327,6 +501,9 @@
       default: return "Unknown";
     }
   }
+
+  /* Load history on first paint so the trail shows if present */
+  setTimeout(() => { try { initMap(); drawHistory(JSON.parse(Android.getLocationHistory())); } catch (e) {} }, 300);
 </script>
 </body>
 </html>

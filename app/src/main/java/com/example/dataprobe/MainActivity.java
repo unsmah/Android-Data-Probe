@@ -34,7 +34,10 @@ import android.webkit.WebViewClient;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
@@ -44,6 +47,9 @@ import com.google.android.gms.tasks.Task;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,6 +63,8 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
     private LocationManager locationManager;
+    private FusedLocationProviderClient fusedClient;
+    private LocationCallback locationCallback;
 
     private BroadcastReceiver wifiScanReceiver;
     private BroadcastReceiver bluetoothReceiver;
@@ -71,6 +79,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERM_REQ = 1001;
     private static final int BT_ENABLE_REQ = 1002;
     private static final int LOC_ENABLE_REQ = 1003;
+    private static final String HISTORY_FILE = "location_history.json";
+    private static final int HISTORY_MAX = 500;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
         BluetoothManager bm = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = (bm != null) ? bm.getAdapter() : BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter != null) bleScanner = bluetoothAdapter.getBluetoothLeScanner();
+        fusedClient = LocationServices.getFusedLocationProviderClient(this);
 
         webView = new WebView(this);
         webView.getSettings().setJavaScriptEnabled(true);
@@ -95,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /* ============================================================
-       Auto-refresh receivers — fire whenever toggles change
+       Auto-refresh receivers
        ============================================================ */
 
     private void registerStateReceiver() {
@@ -103,25 +114,12 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceive(Context ctx, Intent intent) {
                 String action = intent.getAction();
-                if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)
-                    || BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)
-                    || LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) {
-
-                    // Small delay so the OS has finished updating its state
-                    scanHandler.postDelayed(() -> {
-                        pushPermissionStatus();
-                        // Push live data depending on which toggle changed
-                        if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)) {
-                            pushWifiInfo();
-                        }
-                        if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
-                            pushBondedDevices();
-                        }
-                        if (LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) {
-                            pushLocation();
-                        }
-                    }, 500);
-                }
+                scanHandler.postDelayed(() -> {
+                    pushPermissionStatus();
+                    if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)) pushWifiInfo();
+                    if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) pushBondedDevices();
+                    if (LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) pushLocation();
+                }, 500);
             }
         };
         IntentFilter f = new IntentFilter();
@@ -200,7 +198,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         pushPermissionStatus();
-        // Refresh every live section, in case the user flipped toggles while away
         pushWifiInfo();
         pushBondedDevices();
         pushLocation();
@@ -253,6 +250,46 @@ public class MainActivity extends AppCompatActivity {
             pushLocation();
         }, 800);
     }
+
+    /* ============================================================
+       Location history persistence
+       ============================================================ */
+
+    private File historyFile() { return new File(getFilesDir(), HISTORY_FILE); }
+
+    private JSONArray readHistory() {
+        try {
+            File f = historyFile();
+            if (!f.exists()) return new JSONArray();
+            String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            return new JSONArray(s);
+        } catch (Exception e) { return new JSONArray(); }
+    }
+
+    private void writeHistory(JSONArray arr) {
+        try {
+            Files.write(historyFile().toPath(),
+                arr.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+    }
+
+    private void appendHistory(Location loc) {
+        try {
+            JSONArray arr = readHistory();
+            JSONObject o = new JSONObject();
+            o.put("lat", loc.getLatitude());
+            o.put("lon", loc.getLongitude());
+            o.put("acc", loc.getAccuracy());
+            o.put("t", loc.getTime());
+            arr.put(o);
+            while (arr.length() > HISTORY_MAX) arr.remove(0);
+            writeHistory(arr);
+        } catch (Exception ignored) {}
+    }
+
+    /* ============================================================
+       Bridge
+       ============================================================ */
 
     public class AndroidBridge {
 
@@ -385,7 +422,6 @@ public class MainActivity extends AppCompatActivity {
                         o.put("Level", r.level);
                         o.put("Frequency", r.frequency);
                         o.put("Capabilities", r.capabilities);
-                        o.put("ChannelWidth", r.channelWidth);
                         arr.put(o);
                     }
                 }
@@ -532,7 +568,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        /* ============ Location ============ */
+        /* ============ Location: one-shot ============ */
         @JavascriptInterface
         public String getLocation() {
             JSONObject o = new JSONObject();
@@ -549,6 +585,7 @@ public class MainActivity extends AppCompatActivity {
                     o.put("Accuracy", loc.getAccuracy());
                     o.put("Altitude", loc.getAltitude());
                     o.put("Speed", loc.getSpeed());
+                    o.put("MapsUrl", "https://www.google.com/maps?q=" + loc.getLatitude() + "," + loc.getLongitude());
                 } else {
                     o.put("error", "No location fix yet. Move to an open area and wait.");
                 }
@@ -558,28 +595,112 @@ public class MainActivity extends AppCompatActivity {
             return o.toString();
         }
 
-        /* ============ Installed Apps (with icons) ============ */
+        /* ============ Location: live tracking ============ */
         @JavascriptInterface
-        public String getInstalledApps() {
+        public void startLiveTracking() {
+            runOnUiThread(() -> {
+                if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    webView.evaluateJavascript(
+                        "window.onLiveLocationError('Location permission not granted')", null);
+                    return;
+                }
+                if (locationCallback != null) return;
+                if (!isLocationEnabled()) {
+                    webView.evaluateJavascript(
+                        "window.onLiveLocationError('Location is off. Turn it on first.')", null);
+                    return;
+                }
+
+                LocationRequest req = new LocationRequest.Builder(
+                        Priority.PRIORITY_HIGH_ACCURACY, 3000)
+                    .setMinUpdateIntervalMillis(1000)
+                    .build();
+
+                locationCallback = new LocationCallback() {
+                    @Override
+                    public void onLocationResult(@NonNull LocationResult result) {
+                        Location loc = result.getLastLocation();
+                        if (loc == null) return;
+                        appendHistory(loc);
+                        try {
+                            JSONObject o = new JSONObject();
+                            o.put("Latitude", loc.getLatitude());
+                            o.put("Longitude", loc.getLongitude());
+                            o.put("Accuracy", loc.getAccuracy());
+                            o.put("Altitude", loc.getAltitude());
+                            o.put("Speed", loc.getSpeed());
+                            o.put("Timestamp", loc.getTime());
+                            final String js = "window.onLiveLocationUpdate(" + o + ")";
+                            webView.post(() -> webView.evaluateJavascript(js, null));
+                        } catch (Exception ignored) {}
+                    }
+                };
+
+                try {
+                    fusedClient.requestLocationUpdates(req, locationCallback, Looper.getMainLooper());
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.onLiveLocationStarted()", null));
+                } catch (SecurityException e) {
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.onLiveLocationError('" + escape(e.getMessage()) + "')", null));
+                    locationCallback = null;
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stopLiveTracking() {
+            runOnUiThread(() -> {
+                if (fusedClient != null && locationCallback != null) {
+                    fusedClient.removeLocationUpdates(locationCallback);
+                    locationCallback = null;
+                }
+                webView.post(() -> webView.evaluateJavascript(
+                    "window.onLiveLocationStopped()", null));
+            });
+        }
+
+        /* ============ Location history ============ */
+        @JavascriptInterface
+        public String getLocationHistory() {
+            return readHistory().toString();
+        }
+
+        @JavascriptInterface
+        public void clearLocationHistory() {
+            runOnUiThread(() -> {
+                try { historyFile().delete(); } catch (Exception ignored) {}
+            });
+        }
+
+        /* ============ Installed Apps (lazy, with filter) ============ */
+        @JavascriptInterface
+        public String getInstalledApps(String filter) {
             JSONArray arr = new JSONArray();
             try {
                 PackageManager pm = getPackageManager();
                 List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
                 for (ApplicationInfo app : apps) {
+                    boolean isSystem = (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                    String type = isSystem ? "system" : "user";
+                    if (filter != null && !"all".equals(filter) && !type.equals(filter)) continue;
+
                     JSONObject o = new JSONObject();
                     o.put("Package", app.packageName);
                     String name;
                     try { name = pm.getApplicationLabel(app).toString(); }
                     catch (Exception e) { name = app.packageName; }
                     o.put("Name", name);
+                    o.put("Type", type);
                     try {
                         Drawable d = pm.getApplicationIcon(app);
                         Bitmap bm = drawableToBitmap(d, 72);
                         if (bm != null) {
                             ByteArrayOutputStream bos = new ByteArrayOutputStream();
                             bm.compress(Bitmap.CompressFormat.PNG, 80, bos);
-                            String b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
-                            o.put("Icon", "data:image/png;base64," + b64);
+                            o.put("Icon", "data:image/png;base64," +
+                                Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
                         }
                     } catch (Exception ignored) {}
                     arr.put(o);
@@ -630,6 +751,10 @@ public class MainActivity extends AppCompatActivity {
         try { if (stateReceiver != null) unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
         try {
             if (bleScanner != null && bleCallback != null) bleScanner.stopScan(bleCallback);
+        } catch (Exception ignored) {}
+        try {
+            if (fusedClient != null && locationCallback != null)
+                fusedClient.removeLocationUpdates(locationCallback);
         } catch (Exception ignored) {}
         super.onDestroy();
     }
