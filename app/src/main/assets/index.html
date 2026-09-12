@@ -281,6 +281,57 @@
     margin-top: 10px;
   }
 
+
+  /* Fullscreen WiFi map (covers everything except tabbar) */
+  body.map-fullscreen main { padding: 0; }
+  body.map-fullscreen .perm-banner { display: none !important; }
+  #wifiViewMap.map-fullscreen {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    background: var(--bg);
+    padding: 0;
+  }
+  #wifiViewMap.map-fullscreen #wifiMap {
+    position: absolute; inset: 0;
+    height: 100%; width: 100%;
+    border-radius: 0; border: none; margin: 0;
+  }
+  #wifiViewMap.map-fullscreen .map-overlay {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: 12px; right: 12px;
+    z-index: 500;
+    background: rgba(12,14,20,0.92);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex; align-items: center; gap: 12px;
+  }
+  #wifiViewMap.map-fullscreen .map-overlay .back-btn { padding: 0; margin: 0; }
+  #wifiViewMap.map-fullscreen .map-overlay .mtitle {
+    flex: 1; min-width: 0;
+  }
+  #wifiViewMap.map-fullscreen .map-overlay .mtitle .name {
+    font-size: 14px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #wifiViewMap.map-fullscreen .map-overlay .mtitle .sub {
+    font-size: 11.5px; color: var(--text-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+
+  .detail-kv {
+    display: grid; grid-template-columns: 42% 1fr; gap: 8px 14px;
+    margin: 0; padding: 14px 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    font-size: 13px;
+  }
+
 </style>
 </head>
 <body>
@@ -329,6 +380,9 @@
       </div>
       <h1>Wi-Fi history</h1>
       <p class="subtitle" id="wifiHistorySummary"></p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnPinAllOnMap" style="width:100%;">&#128506; Pin all on map</button>
+      </div>
       <div id="wifiHistoryList"></div>
       <button class="btn btn-danger" id="btnClearWifiHistory" style="width:100%;">Clear all history</button>
     </div>
@@ -350,12 +404,12 @@
 
     <!-- View: map -->
     <div id="wifiViewMap" style="display:none;">
-      <div class="back-bar">
+      <div id="wifiMapOverlayStatic" class="back-bar" style="padding:12px 16px 0;">
         <button class="back-btn" id="wifiBackMap">&#8592; Back</button>
       </div>
-      <h1 id="wifiMapTitle"></h1>
-      <p class="subtitle" id="wifiMapSubtitle"></p>
-      <div id="wifiMap"></div>
+      <h1 id="wifiMapTitle" style="padding:0 16px;"></h1>
+      <p class="subtitle" id="wifiMapSubtitle" style="padding:0 16px;"></p>
+      <div id="wifiMap" style="margin:10px 16px 0;"></div>
     </div>
 
   </section>
@@ -564,6 +618,38 @@
   /* ============ WI-FI ============ */
   renderDL($("wifiInfo"), safeJSON(Android.getWifiInfo(), {}));
 
+  /* ---- fetch public IP + ISP (opt-in network call) ---- */
+  let publicIpInfo = null;
+  (function fetchPublicIp() {
+    fetch("https://ipwho.is/", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.success !== false) {
+          publicIpInfo = d;
+          // Merge into the WiFi card if it's already rendered
+          const current = safeJSON(Android.getWifiInfo(), {});
+          current["Public IP"]   = d.ip;
+          current["ISP"]         = d.connection?.isp || d.connection?.org || "—";
+          current["ASN"]         = d.connection?.asn || "—";
+          current["Country"]     = d.country || "—";
+          current["City"]        = d.city || "—";
+          renderDL($("wifiInfo"), current);
+        }
+      })
+      .catch(() => {});
+  })();
+
+  window.onWifiInfoUpdated = function (info) {
+    if (publicIpInfo) {
+      info["Public IP"] = publicIpInfo.ip;
+      info["ISP"] = publicIpInfo.connection?.isp || publicIpInfo.connection?.org || "—";
+      info["ASN"] = publicIpInfo.connection?.asn || "—";
+      info["Country"] = publicIpInfo.country || "—";
+      info["City"] = publicIpInfo.city || "—";
+    }
+    renderDL($("wifiInfo"), info);
+  };
+
   /* ---- signal bars helper ---- */
   function signalInfo(rssi) {
     const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
@@ -656,6 +742,17 @@
       el.style.display = (k === current ? "" : "none");
     });
     document.querySelector("main").scrollTop = 0;
+
+    // Fullscreen handling: only when the map view is showing AND we're in the WiFi tab
+    const wifiActive = document.querySelector('.tabbar button[data-tab="wifi"]').classList.contains("active");
+    if (current === "map" && wifiActive) {
+      document.body.classList.add("map-fullscreen");
+      wifiViews.map.classList.add("map-fullscreen");
+    } else {
+      document.body.classList.remove("map-fullscreen");
+      wifiViews.map.classList.remove("map-fullscreen");
+    }
+
     if (current === "history") renderWifiHistoryList();
     if (current === "map" && wifiMapInstance) {
       setTimeout(() => wifiMapInstance.invalidateSize(), 80);
@@ -670,15 +767,17 @@
   $("wifiBackHistory").addEventListener("click", () => popWifiView());
   $("wifiBackMap").addEventListener("click", () => popWifiView());
 
-  /* Reset stack when leaving the WiFi tab */
   tabs.forEach(b => b.addEventListener("click", () => {
     if (b.dataset.tab !== "wifi" && wifiStack.length > 1) {
       wifiStack = ["root"];
       renderWifiView();
     }
+    if (b.dataset.tab !== "wifi") {
+      document.body.classList.remove("map-fullscreen");
+    }
   }));
 
-  /* ---------- History list (unique WiFi names only) ---------- */
+  /* ---------- History list (unique WiFi names) ---------- */
   function renderWifiHistoryList() {
     const list = safeJSON(Android.getWifiNetworkList(), []);
     list.sort((a, b) => b.lastSeen - a.lastSeen);
@@ -697,7 +796,9 @@
       return '<div class="net-card" data-bssid="' + esc(n.bssid) + '">' +
         '<div class="left">' +
           '<div class="net-ssid">' + esc(ssid) + '</div>' +
-          '<div class="net-sub">' + esc(n.bssid) + '</div>' +
+          '<div class="net-sub">' + esc(n.bssid) +
+            (n.manufacturer ? ' · ' + esc(n.manufacturer) : '') +
+          '</div>' +
         '</div>' +
         '<div class="chev">&#8250;</div>' +
       '</div>';
@@ -712,6 +813,25 @@
     if (!confirm("Clear all Wi-Fi history? This cannot be undone.")) return;
     Android.clearWifiNetworks();
     renderWifiHistoryList();
+  });
+
+  /* ---------- Pin-all-on-map ---------- */
+  $("btnPinAllOnMap").addEventListener("click", () => {
+    const list = safeJSON(Android.getWifiNetworkList(), []);
+    const pins = list.filter(n =>
+      typeof n.lastLat === "number" && typeof n.lastLon === "number");
+    if (!pins.length) {
+      alert("No Wi-Fi has a recorded location yet. Turn on location and run a scan.");
+      return;
+    }
+    $("wifiMapTitle").textContent = "All Wi-Fi networks";
+    $("wifiMapSubtitle").textContent = pins.length + " network" +
+      (pins.length === 1 ? "" : "s") + " pinned at their latest detection";
+    pushWifiView("map");
+    setTimeout(() => {
+      initWifiMap();
+      setTimeout(() => renderAllPins(pins), 180);
+    }, 80);
   });
 
   /* ---------- Network detail ---------- */
@@ -733,26 +853,48 @@
     const sightings   = d.sightings   || [];
     const connections = d.connections || [];
 
-    renderDL($("wifiNetCounts"), {
-      "Times found":     sightings.length,
-      "Times connected": connections.length,
-      "First seen":      fmtDate(d.firstSeen),
-      "Last seen":       fmtDate(d.lastSeen)
-    });
+    // Best/latest signal
+    let bestLevel = -200, latestLevel = 0, latestFreq = 0;
+    if (sightings.length) {
+      for (const s of sightings) {
+        const lvl = s[4] || -200;
+        if (lvl > bestLevel) bestLevel = lvl;
+      }
+      const last = sightings[sightings.length - 1];
+      latestLevel = last[4] || 0;
+      latestFreq  = last[5] || 0;
+    }
 
-    /* Reset toggle */
+    const freqStr = latestFreq ? latestFreq + " MHz (" + freqBand(latestFreq) + ")" : "—";
+    const manuf   = d.manufacturer || "Unknown";
+
+    const info = {
+      "SSID":               ssid,
+      "BSSID":              d.bssid || "—",
+      "Router manufacturer": manuf,
+      "Best signal":        bestLevel > -200 ? bestLevel + " dBm" : "—",
+      "Latest signal":      latestLevel ? latestLevel + " dBm" : "—",
+      "Latest frequency":   freqStr,
+      "Times found":        sightings.length,
+      "Times connected":    connections.length,
+      "First seen":         fmtDate(d.firstSeen),
+      "Last seen":          fmtDate(d.lastSeen)
+    };
+    renderDL($("wifiNetCounts"), info);
+
+    // Reset toggle
     $("wifiNetSightings").style.display = "none";
-    $("btnToggleSightings").textContent = "Show all scan times ▾";
+    $("btnToggleSightings").textContent = "Show all scan times \u25BE";
 
     $("btnToggleSightings").onclick = () => {
       const visible = $("wifiNetSightings").style.display !== "none";
       if (visible) {
         $("wifiNetSightings").style.display = "none";
-        $("btnToggleSightings").textContent = "Show all scan times ▾";
+        $("btnToggleSightings").textContent = "Show all scan times \u25BE";
       } else {
         renderSightingsList(sightings);
         $("wifiNetSightings").style.display = "";
-        $("btnToggleSightings").textContent = "Hide scan times ▴";
+        $("btnToggleSightings").textContent = "Hide scan times \u25B4";
       }
     };
 
@@ -760,7 +902,13 @@
       for (let i = sightings.length - 1; i >= 0; i--) {
         const s = sightings[i];
         if (typeof s[1] === "number" && typeof s[2] === "number") {
-          showWifiMap(s[1], s[2], ssid, fmtDate(s[0]));
+          $("wifiMapTitle").textContent = ssid;
+          $("wifiMapSubtitle").textContent = "Detected at " + fmtDate(s[0]);
+          pushWifiView("map");
+          setTimeout(() => {
+            initWifiMap();
+            setTimeout(() => renderSinglePin(s[1], s[2], ssid, fmtDate(s[0])), 180);
+          }, 80);
           return;
         }
       }
@@ -800,14 +948,20 @@
           ? ((currentWifiNetwork.ssid && currentWifiNetwork.ssid !== "")
               ? currentWifiNetwork.ssid : "(hidden)")
           : "";
-        showWifiMap(lat, lon, name, btn.dataset.time);
+        $("wifiMapTitle").textContent = name;
+        $("wifiMapSubtitle").textContent = "Detected at " + btn.dataset.time;
+        pushWifiView("map");
+        setTimeout(() => {
+          initWifiMap();
+          setTimeout(() => renderSinglePin(lat, lon, name, btn.dataset.time), 180);
+        }, 80);
       });
     });
   }
 
-  /* ---------- In-app Leaflet map for a WiFi pin ---------- */
+  /* ---------- Leaflet map for WiFi pins ---------- */
   let wifiMapInstance = null;
-  let wifiMapMarker = null;
+  let wifiMapLayer = null;
 
   function initWifiMap() {
     if (wifiMapInstance) return;
@@ -815,24 +969,46 @@
     wifiMapInstance = L.map("wifiMap", { zoomControl: true }).setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(wifiMapInstance);
+    wifiMapLayer = L.layerGroup().addTo(wifiMapInstance);
   }
 
-  function showWifiMap(lat, lon, name, time) {
-    $("wifiMapTitle").textContent = name;
-    $("wifiMapSubtitle").textContent = "Detected at " + time;
-    pushWifiView("map");
-    setTimeout(() => {
-      initWifiMap();
-      setTimeout(() => {
-        if (!wifiMapInstance) return;
-        wifiMapInstance.invalidateSize();
-        if (wifiMapMarker) wifiMapInstance.removeLayer(wifiMapMarker);
-        wifiMapMarker = L.marker([lat, lon]).addTo(wifiMapInstance)
-          .bindPopup("<b>" + esc(name) + "</b><br>" + esc(time))
-          .openPopup();
-        wifiMapInstance.setView([lat, lon], 17);
-      }, 180);
-    }, 80);
+  function renderSinglePin(lat, lon, name, time) {
+    if (!wifiMapInstance) return;
+    wifiMapInstance.invalidateSize();
+    wifiMapLayer.clearLayers();
+    L.marker([lat, lon]).addTo(wifiMapLayer)
+      .bindPopup("<b>" + esc(name) + "</b><br>" + esc(time))
+      .openPopup();
+    wifiMapInstance.setView([lat, lon], 17);
+  }
+
+  function renderAllPins(pins) {
+    if (!wifiMapInstance) return;
+    wifiMapInstance.invalidateSize();
+    wifiMapLayer.clearLayers();
+    const bounds = [];
+    const colors = ["#7c8cff", "#4ade80", "#f5c76e", "#f87171", "#c084fc",
+                    "#22d3ee", "#facc15", "#fb923c", "#a3e635", "#e879f9"];
+    pins.forEach((p, i) => {
+      const color = colors[i % colors.length];
+      const lat = p.lastLat, lon = p.lastLon;
+      bounds.push([lat, lon]);
+      const circle = L.circleMarker([lat, lon], {
+        radius: 10, color, fillColor: color, fillOpacity: 0.85, weight: 3
+      }).addTo(wifiMapLayer);
+      circle.bindPopup(
+        "<b>" + esc(p.ssid || "(hidden)") + "</b><br>" +
+        esc(p.bssid) + "<br>" +
+        (p.manufacturer ? esc(p.manufacturer) + "<br>" : "") +
+        "Last seen: " + esc(fmtDate(p.lastSeen))
+      );
+    });
+    if (bounds.length === 1) {
+      wifiMapInstance.setView(bounds[0], 16);
+      wifiMapLayer.eachLayer(l => l.openPopup && l.openPopup());
+    } else if (bounds.length > 1) {
+      wifiMapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+    }
   }
 
   /* ============ BLUETOOTH ============ */
