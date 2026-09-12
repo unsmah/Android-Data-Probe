@@ -1,9 +1,6 @@
 package com.example.dataprobe;
 
 import android.Manifest;
-import android.accounts.Account;
-import android.accounts.AccountManager;
-import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
@@ -17,6 +14,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.wifi.WifiInfo;
@@ -26,6 +27,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -41,6 +43,7 @@ import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.Task;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,9 +56,11 @@ public class MainActivity extends AppCompatActivity {
     private WifiManager wifiManager;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
+    private LocationManager locationManager;
 
     private BroadcastReceiver wifiScanReceiver;
     private BroadcastReceiver bluetoothReceiver;
+    private BroadcastReceiver stateReceiver;
     private ScanCallback bleCallback;
 
     private boolean isWifiScanning = false;
@@ -72,6 +77,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         BluetoothManager bm = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = (bm != null) ? bm.getAdapter() : BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter != null) bleScanner = bluetoothAdapter.getBluetoothLeScanner();
@@ -84,8 +90,72 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
 
+        registerStateReceiver();
         requestRuntimePermissions();
     }
+
+    /* ============================================================
+       Auto-refresh receivers — fire whenever toggles change
+       ============================================================ */
+
+    private void registerStateReceiver() {
+        stateReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                String action = intent.getAction();
+                if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)
+                    || BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)
+                    || LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) {
+
+                    // Small delay so the OS has finished updating its state
+                    scanHandler.postDelayed(() -> {
+                        pushPermissionStatus();
+                        // Push live data depending on which toggle changed
+                        if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)) {
+                            pushWifiInfo();
+                        }
+                        if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                            pushBondedDevices();
+                        }
+                        if (LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) {
+                            pushLocation();
+                        }
+                    }, 500);
+                }
+            }
+        };
+        IntentFilter f = new IntentFilter();
+        f.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        f.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        f.addAction(LocationManager.PROVIDERS_CHANGED_ACTION);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(stateReceiver, f, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(stateReceiver, f);
+        }
+    }
+
+    private void pushWifiInfo() {
+        if (webView == null) return;
+        final String js = "window.onWifiInfoUpdated(" + new AndroidBridge().getWifiInfo() + ")";
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void pushBondedDevices() {
+        if (webView == null) return;
+        final String js = "window.onBondedDevicesUpdated(" + new AndroidBridge().getBluetoothBondedDevices() + ")";
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void pushLocation() {
+        if (webView == null) return;
+        final String js = "window.onLocationUpdated(" + new AndroidBridge().getLocation() + ")";
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    /* ============================================================
+       Permissions
+       ============================================================ */
 
     private List<String> requiredPermissions() {
         List<String> perms = new ArrayList<>();
@@ -104,9 +174,7 @@ public class MainActivity extends AppCompatActivity {
         for (String p : requiredPermissions()) {
             if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) missing.add(p);
         }
-        if (!missing.isEmpty()) {
-            requestPermissions(missing.toArray(new String[0]), PERM_REQ);
-        }
+        if (!missing.isEmpty()) requestPermissions(missing.toArray(new String[0]), PERM_REQ);
     }
 
     private boolean hasAllPermissions() {
@@ -120,8 +188,6 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int code, @NonNull String[] perms, @NonNull int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
         if (code != PERM_REQ) return;
-
-        // After all permissions granted, if location toggle is off, offer the modal.
         boolean locGranted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
         if (locGranted && !isLocationEnabled()) {
@@ -133,12 +199,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (webView != null) {
-            final boolean on = isLocationEnabled();
-            webView.post(() ->
-                webView.evaluateJavascript("window.onLocationStateChanged(" + on + ")", null));
-            pushPermissionStatus();
-        }
+        pushPermissionStatus();
+        // Refresh every live section, in case the user flipped toggles while away
+        pushWifiInfo();
+        pushBondedDevices();
+        pushLocation();
     }
 
     private void pushPermissionStatus() {
@@ -146,16 +211,16 @@ public class MainActivity extends AppCompatActivity {
         final boolean ok = hasAllPermissions();
         final boolean locOn = isLocationEnabled();
         final boolean btOn = bluetoothAdapter != null && bluetoothAdapter.isEnabled();
+        final boolean wifiOn = wifiManager != null && wifiManager.isWifiEnabled();
         webView.post(() -> webView.evaluateJavascript(
-            "window.onPermissionsChanged(" + ok + "," + locOn + "," + btOn + ")", null));
+            "window.onPermissionsChanged(" + ok + "," + locOn + "," + btOn + "," + wifiOn + ")", null));
     }
 
     private boolean isLocationEnabled() {
         try {
-            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            if (Build.VERSION.SDK_INT >= 28) return lm.isLocationEnabled();
-            return lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-                || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            if (Build.VERSION.SDK_INT >= 28) return locationManager.isLocationEnabled();
+            return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
         } catch (Exception e) { return false; }
     }
 
@@ -182,6 +247,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int req, int result, Intent data) {
         super.onActivityResult(req, result, data);
         pushPermissionStatus();
+        scanHandler.postDelayed(() -> {
+            pushWifiInfo();
+            pushBondedDevices();
+            pushLocation();
+        }, 800);
     }
 
     public class AndroidBridge {
@@ -218,6 +288,7 @@ public class MainActivity extends AppCompatActivity {
                     checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED);
                 o.put("locationEnabled", isLocationEnabled());
                 o.put("bluetoothEnabled", bluetoothAdapter != null && bluetoothAdapter.isEnabled());
+                o.put("wifiEnabled", wifiManager != null && wifiManager.isWifiEnabled());
             } catch (Exception ignored) {}
             return o.toString();
         }
@@ -236,9 +307,16 @@ public class MainActivity extends AppCompatActivity {
         public void enableBluetoothFromUi() {
             runOnUiThread(() -> {
                 try {
-                    Intent i = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                    startActivityForResult(i, BT_ENABLE_REQ);
+                    startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), BT_ENABLE_REQ);
                 } catch (Exception ignored) {}
+            });
+        }
+
+        @JavascriptInterface
+        public void openWifiSettings() {
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS)); }
+                catch (Exception ignored) {}
             });
         }
 
@@ -247,6 +325,10 @@ public class MainActivity extends AppCompatActivity {
         public String getWifiInfo() {
             JSONObject o = new JSONObject();
             try {
+                if (!wifiManager.isWifiEnabled()) {
+                    o.put("error", "Wi-Fi is off. Turn it on to see the current network.");
+                    return o.toString();
+                }
                 WifiInfo info = wifiManager.getConnectionInfo();
                 o.put("SSID", info.getSSID());
                 o.put("BSSID", info.getBSSID());
@@ -266,8 +348,12 @@ public class MainActivity extends AppCompatActivity {
         public void startWifiScan() {
             runOnUiThread(() -> {
                 if (isWifiScanning) return;
+                if (!wifiManager.isWifiEnabled()) {
+                    webView.evaluateJavascript(
+                        "window.onWifiScanError('Wi-Fi is off. Turn it on in the top banner.')", null);
+                    return;
+                }
                 isWifiScanning = true;
-
                 wifiScanReceiver = new BroadcastReceiver() {
                     @Override public void onReceive(Context ctx, Intent intent) { pushWifiResults(); }
                 };
@@ -300,7 +386,6 @@ public class MainActivity extends AppCompatActivity {
                         o.put("Frequency", r.frequency);
                         o.put("Capabilities", r.capabilities);
                         o.put("ChannelWidth", r.channelWidth);
-                        o.put("Timestamp", r.timestamp);
                         arr.put(o);
                     }
                 }
@@ -319,24 +404,23 @@ public class MainActivity extends AppCompatActivity {
         public String getBluetoothBondedDevices() {
             JSONArray arr = new JSONArray();
             try {
-                if (bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
-                    Set<BluetoothDevice> bonded = bluetoothAdapter.getBondedDevices();
-                    for (BluetoothDevice d : bonded) {
-                        JSONObject o = new JSONObject();
-                        String name = null;
-                        try { name = d.getName(); } catch (SecurityException ignored) {}
-                        o.put("Name", name != null ? name : "(unnamed)");
-                        o.put("Address", safeAddress(d));
-                        o.put("Type", d.getType());
-                        o.put("Bonded", true);
-                        arr.put(o);
-                    }
+                if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) return arr.toString();
+                Set<BluetoothDevice> bonded = bluetoothAdapter.getBondedDevices();
+                for (BluetoothDevice d : bonded) {
+                    JSONObject o = new JSONObject();
+                    String name = null;
+                    try { name = d.getName(); } catch (SecurityException ignored) {}
+                    o.put("Name", name != null ? name : "(unnamed)");
+                    o.put("Address", safeAddress(d));
+                    o.put("Type", d.getType());
+                    o.put("Bonded", true);
+                    arr.put(o);
                 }
             } catch (Exception ignored) {}
             return arr.toString();
         }
 
-        /* ============ Bluetooth: live discovery (classic + BLE) ============ */
+        /* ============ Bluetooth: live discovery ============ */
         @JavascriptInterface
         public void startBluetoothDiscovery() {
             runOnUiThread(() -> {
@@ -347,14 +431,13 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (!bluetoothAdapter.isEnabled()) {
                     webView.evaluateJavascript(
-                        "window.onBluetoothError('Bluetooth is off. Tap \"Turn on Bluetooth\" to enable it.')", null);
+                        "window.onBluetoothError('Bluetooth is off. Turn it on in the top banner.')", null);
                     return;
                 }
                 if (isBluetoothScanning) return;
                 isBluetoothScanning = true;
                 btSeen.clear();
 
-                /* --- classic discovery --- */
                 bluetoothReceiver = new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context ctx, Intent intent) {
@@ -371,7 +454,6 @@ public class MainActivity extends AppCompatActivity {
                                 emitBluetoothDevice(device, rssi, "classic");
                             }
                         } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                            // classic done — BLE may still be running; finalize only if BLE also stopped
                             if (bleCallback == null) finishBluetoothScan();
                         }
                     }
@@ -386,7 +468,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 try { bluetoothAdapter.startDiscovery(); } catch (SecurityException ignored) {}
 
-                /* --- BLE scan in parallel --- */
                 if (bleScanner != null) {
                     bleCallback = new ScanCallback() {
                         @Override public void onScanResult(int type, ScanResult result) {
@@ -403,7 +484,6 @@ public class MainActivity extends AppCompatActivity {
                     catch (SecurityException ignored) {}
                 }
 
-                /* --- overall stop after 15s --- */
                 scanHandler.postDelayed(this::stopBluetoothDiscoveryInternal, 15000);
             });
         }
@@ -457,9 +537,12 @@ public class MainActivity extends AppCompatActivity {
         public String getLocation() {
             JSONObject o = new JSONObject();
             try {
-                LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                Location loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                if (loc == null) loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                if (!isLocationEnabled()) {
+                    o.put("error", "Location is off. Turn it on to see coordinates.");
+                    return o.toString();
+                }
+                Location loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                if (loc == null) loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
                 if (loc != null) {
                     o.put("Latitude", loc.getLatitude());
                     o.put("Longitude", loc.getLongitude());
@@ -467,7 +550,7 @@ public class MainActivity extends AppCompatActivity {
                     o.put("Altitude", loc.getAltitude());
                     o.put("Speed", loc.getSpeed());
                 } else {
-                    o.put("error", "No location available. Ensure GPS is on and wait a moment.");
+                    o.put("error", "No location fix yet. Move to an open area and wait.");
                 }
             } catch (Exception e) {
                 try { o.put("error", e.getMessage()); } catch (Exception ignored) {}
@@ -475,7 +558,7 @@ public class MainActivity extends AppCompatActivity {
             return o.toString();
         }
 
-        /* ============ Installed Apps ============ */
+        /* ============ Installed Apps (with icons) ============ */
         @JavascriptInterface
         public String getInstalledApps() {
             JSONArray arr = new JSONArray();
@@ -485,11 +568,38 @@ public class MainActivity extends AppCompatActivity {
                 for (ApplicationInfo app : apps) {
                     JSONObject o = new JSONObject();
                     o.put("Package", app.packageName);
-                    o.put("Name", pm.getApplicationLabel(app).toString());
+                    String name;
+                    try { name = pm.getApplicationLabel(app).toString(); }
+                    catch (Exception e) { name = app.packageName; }
+                    o.put("Name", name);
+                    try {
+                        Drawable d = pm.getApplicationIcon(app);
+                        Bitmap bm = drawableToBitmap(d, 72);
+                        if (bm != null) {
+                            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                            bm.compress(Bitmap.CompressFormat.PNG, 80, bos);
+                            String b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+                            o.put("Icon", "data:image/png;base64," + b64);
+                        }
+                    } catch (Exception ignored) {}
                     arr.put(o);
                 }
             } catch (Exception ignored) {}
             return arr.toString();
+        }
+
+        private Bitmap drawableToBitmap(Drawable drawable, int size) {
+            try {
+                if (drawable instanceof BitmapDrawable) {
+                    Bitmap src = ((BitmapDrawable) drawable).getBitmap();
+                    if (src != null) return Bitmap.createScaledBitmap(src, size, size, true);
+                }
+                Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bmp);
+                drawable.setBounds(0, 0, size, size);
+                drawable.draw(canvas);
+                return bmp;
+            } catch (Exception e) { return null; }
         }
 
         /* ============ helpers ============ */
@@ -517,6 +627,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         try { if (wifiScanReceiver != null) unregisterReceiver(wifiScanReceiver); } catch (Exception ignored) {}
         try { if (bluetoothReceiver != null) unregisterReceiver(bluetoothReceiver); } catch (Exception ignored) {}
+        try { if (stateReceiver != null) unregisterReceiver(stateReceiver); } catch (Exception ignored) {}
         try {
             if (bleScanner != null && bleCallback != null) bleScanner.stopScan(bleCallback);
         } catch (Exception ignored) {}

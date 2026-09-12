@@ -22,7 +22,6 @@
   button:active { background:#232a3a; }
   button.primary { background:#1e2c4a; border-color:#2f4a7a; color:#cfe0ff; }
 
-  /* top-of-page sticky overlay until permissions are ready */
   .permbar {
     position:sticky; top:0; z-index:10;
     background:#2a1a12; border:1px solid #5a3a1a; color:#f5c76e;
@@ -32,10 +31,8 @@
   .permbar.show { display:block; }
   .permbar .row { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
   .permbar button { background:#3a2412; border-color:#5a3a1a; color:#f5c76e;
-                    padding:7px 12px; font-size:12.5px; }
-  .permbar .ok { color:#6fd08c; }
+                    padding:7px 12px; font-size:12.5px; margin:0; }
 
-  /* clickable list items */
   .item { background:#12151f; border:1px solid #1f2430; border-radius:10px;
           margin-bottom:8px; overflow:hidden; }
   .item > summary {
@@ -53,19 +50,44 @@
     white-space:pre-wrap; word-break:break-all; line-height:1.6;
   }
   .empty { color:#6b7488; font-size:12.5px; padding:10px 0; }
-  .sig-strong { color:#4ade80; }
-  .sig-ok { color:#f5c76e; }
-  .sig-weak { color:#f87171; }
+
+  /* App grid */
+  .app-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap:14px 10px;
+    margin-top:6px;
+  }
+  .app-tile {
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+    gap:6px;
+  }
+  .app-tile img {
+    width:48px; height:48px; border-radius:12px;
+    background:#1b202c; border:1px solid #232a3a;
+    object-fit:contain;
+  }
+  .app-tile .fallback {
+    width:48px; height:48px; border-radius:12px;
+    background:#232a3a; border:1px solid #2c3346;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; font-weight:700; color:#7c8cff;
+  }
+  .app-tile .label {
+    font-size:11px; line-height:1.25; color:#c8cfe0;
+    word-break:break-word; max-width:100%;
+  }
 </style>
 </head>
 <body>
 
 <div class="permbar" id="permBar">
-  <div id="permMsg">Some permissions are missing — the app can't gather all data yet.</div>
+  <div id="permMsg"></div>
   <div class="row">
     <button id="btnPerms" class="primary">Grant permissions</button>
     <button id="btnLoc">Turn on location</button>
     <button id="btnBt">Turn on Bluetooth</button>
+    <button id="btnWifi">Turn on Wi-Fi</button>
   </div>
 </div>
 
@@ -80,7 +102,6 @@
 
 <h3>Live scan</h3>
 <button onclick="startWifiScan()">Scan now</button>
-<pre id="wifiScan" style="display:none"></pre>
 <div id="wifiList"></div>
 
 <h2>Bluetooth</h2>
@@ -95,86 +116,101 @@
 <h2>Location</h2>
 <dl id="location"></dl>
 
-<h2>Installed Apps</h2>
-<div id="apps" style="font-size:13px; line-height:1.7;"></div>
+<h2>Installed Apps <span id="appCount" style="font-size:12px; color:#6b7488; font-weight:400;"></span></h2>
+<div class="app-grid" id="apps"></div>
 
 <script>
   const $ = id => document.getElementById(id);
 
-  const render = (id, data) => {
-    const el = $(id); if (!el || !data) return;
+  const render = (id, data, emptyText) => {
+    const el = $(id); if (!el) return;
     el.innerHTML = "";
+    if (!data || Object.keys(data).length === 0) {
+      if (emptyText) {
+        const dd = document.createElement("dd");
+        dd.textContent = emptyText;
+        dd.style.color = "#6b7488"; dd.style.gridColumn = "1 / -1";
+        el.appendChild(dd);
+      }
+      return;
+    }
     for (const [k, v] of Object.entries(data)) {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd");
       dd.textContent = (v && typeof v === 'object') ? JSON.stringify(v) : v;
+      if (k === "error") dd.style.color = "#f5c76e";
       el.append(dt, dd);
     }
   };
 
-  /* ---------- signal bars ---------- */
-  const strengthClass = rssi =>
-    rssi >= -60 ? "sig-strong" : rssi >= -75 ? "sig-ok" : "sig-weak";
-
   const freqBand = f =>
     f >= 5925 ? "6 GHz" : f >= 4900 ? "5 GHz" : f >= 2400 ? "2.4 GHz" : f + " MHz";
 
-  /* ---------- initial load ---------- */
+  /* ============ initial load ============ */
   render("device", JSON.parse(Android.getDeviceInfo()));
   render("wifi", JSON.parse(Android.getWifiInfo()));
   render("location", JSON.parse(Android.getLocation()));
+  refreshBondedDevices(JSON.parse(Android.getBluetoothBondedDevices()));
+  loadApps();
 
-  const bonded = JSON.parse(Android.getBluetoothBondedDevices());
-  $("btPaired").innerHTML = bonded.length
-    ? bonded.map(d => itemHTML(
-        d.Name, d.Address,
-        `Address:  ${d.Address}\nType:     ${d.Type}\nPaired:   yes`
-      )).join("")
-    : '<div class="empty">No paired devices.</div>';
-
-  const apps = JSON.parse(Android.getInstalledApps());
-  $("apps").textContent = apps.map(a => a.Name).join("\n");
-
-  /* ---------- permission state ---------- */
+  /* ============ permissions banner ============ */
   const permBar = $("permBar");
 
-  window.onPermissionsChanged = function (allGranted, locOn, btOn) {
+  window.onPermissionsChanged = function (allGranted, locOn, btOn, wifiOn) {
     const needsPerms = !allGranted;
     const needsLoc = allGranted && !locOn;
     const needsBt = allGranted && !btOn;
+    const needsWifi = allGranted && !wifiOn;
 
-    if (!needsPerms && !needsLoc && !needsBt) { permBar.classList.remove("show"); return; }
-
+    if (!needsPerms && !needsLoc && !needsBt && !needsWifi) {
+      permBar.classList.remove("show"); return;
+    }
     permBar.classList.add("show");
-    let msg = "";
-    if (needsPerms) msg = "Permissions missing — grant them so the app can work.";
-    else if (needsLoc && needsBt) msg = "Location and Bluetooth are off — some data won't be available.";
-    else if (needsLoc) msg = "Location is off — Wi-Fi scan results will be empty.";
-    else if (needsBt) msg = "Bluetooth is off — no Bluetooth devices will be found.";
 
-    $("permMsg").textContent = msg;
+    const parts = [];
+    if (needsPerms) parts.push("permissions");
+    if (needsLoc) parts.push("location");
+    if (needsBt) parts.push("Bluetooth");
+    if (needsWifi) parts.push("Wi-Fi");
+    $("permMsg").textContent = "Turn on to gather full data: " + parts.join(", ");
+
     $("btnPerms").style.display = needsPerms ? "" : "none";
     $("btnLoc").style.display = needsLoc ? "" : "none";
     $("btnBt").style.display = needsBt ? "" : "none";
+    $("btnWifi").style.display = needsWifi ? "" : "none";
   };
 
   $("btnPerms").onclick = () => Android.requestPermissionsFromUi();
   $("btnLoc").onclick = () => Android.enableLocationFromUi();
   $("btnBt").onclick = () => Android.enableBluetoothFromUi();
+  $("btnWifi").onclick = () => Android.openWifiSettings();
 
-  // initial pull
   (function () {
     const st = JSON.parse(Android.getPermissionStatus());
-    window.onPermissionsChanged(st.allGranted, st.locationEnabled, st.bluetoothEnabled);
+    window.onPermissionsChanged(st.allGranted, st.locationEnabled,
+      st.bluetoothEnabled, st.wifiEnabled);
   })();
+
+  /* ============ live-update callbacks from Java ============ */
+  window.onWifiInfoUpdated = function (info) {
+    render("wifi", info);
+  };
+
+  window.onBondedDevicesUpdated = function (list) {
+    refreshBondedDevices(list);
+  };
+
+  window.onLocationUpdated = function (loc) {
+    render("location", loc);
+  };
 
   window.onLocationStateChanged = function (on) {
     const st = JSON.parse(Android.getPermissionStatus());
-    window.onPermissionsChanged(st.allGranted, on, st.bluetoothEnabled);
-    if (on) render("location", JSON.parse(Android.getLocation()));
+    window.onPermissionsChanged(st.allGranted, on, st.bluetoothEnabled, st.wifiEnabled);
+    render("location", JSON.parse(Android.getLocation()));
   };
 
-  /* ---------- Wi-Fi live scan ---------- */
+  /* ============ Wi-Fi live scan ============ */
   window.startWifiScan = function () {
     $("wifiList").innerHTML = '<div class="empty">Scanning…</div>';
     Android.startWifiScan();
@@ -183,8 +219,7 @@
   window.onWifiScanComplete = function (results) {
     if (!results.length) {
       $("wifiList").innerHTML =
-        '<div class="empty">No networks found. Check that location services are on, ' +
-        'permission is granted, and wait ~30s between scans (Android rate-limits).</div>';
+        '<div class="empty">No networks found. Wait ~30s between scans (Android rate-limits).</div>';
       return;
     }
     results.sort((a, b) => b.Level - a.Level);
@@ -193,11 +228,11 @@
       return itemHTML(
         name,
         `${n.Level}dBm`,
-        `SSID:        ${name}\n` +
-        `BSSID:       ${n.BSSID}\n` +
-        `Signal:      ${n.Level} dBm\n` +
-        `Frequency:   ${n.Frequency} MHz  (${freqBand(n.Frequency)})\n` +
-        `Capabilities: ${n.Capabilities || "(open)"}`
+        `SSID:         ${name}\n` +
+        `BSSID:        ${n.BSSID}\n` +
+        `Signal:       ${n.Level} dBm\n` +
+        `Frequency:    ${n.Frequency} MHz  (${freqBand(n.Frequency)})\n` +
+        `Capabilities: ${n.Capabilities || "(open network)"}`
       );
     }).join("");
   };
@@ -206,7 +241,16 @@
     $("wifiList").innerHTML = '<div class="empty">Scan error: ' + escapeHtml(msg) + '</div>';
   };
 
-  /* ---------- Bluetooth live discovery ---------- */
+  /* ============ Bluetooth ============ */
+  function refreshBondedDevices(list) {
+    $("btPaired").innerHTML = list.length
+      ? list.map(d => itemHTML(
+          d.Name, d.Address,
+          `Address:  ${d.Address}\nType:     ${deviceTypeLabel(d.Type)}\nPaired:   yes`
+        )).join("")
+      : '<div class="empty">No paired devices. Turn on Bluetooth to see them.</div>';
+  }
+
   const btSeen = new Set();
 
   window.startBtScan = function () {
@@ -218,10 +262,8 @@
   window.onBluetoothDeviceFound = function (d) {
     if (btSeen.has(d.Address)) return;
     btSeen.add(d.Address);
-    const first = btSeen.size === 1;
-    if (first) $("btList").innerHTML = "";
-
-    const html = itemHTML(
+    if (btSeen.size === 1) $("btList").innerHTML = "";
+    $("btList").insertAdjacentHTML("beforeend", itemHTML(
       d.Name,
       `${d.RSSI}dBm`,
       `Name:     ${d.Name}\n` +
@@ -230,8 +272,7 @@
       `Type:     ${deviceTypeLabel(d.Type)}\n` +
       `Paired:   ${d.Bonded ? "yes" : "no"}\n` +
       `Source:   ${d.Source === "ble" ? "BLE advertisement" : "Classic discovery"}`
-    );
-    $("btList").insertAdjacentHTML("beforeend", html);
+    ));
   };
 
   window.onBluetoothScanComplete = function () {
@@ -247,7 +288,20 @@
     $("btList").innerHTML = '<div class="empty">Error: ' + escapeHtml(msg) + '</div>';
   };
 
-  /* ---------- helpers ---------- */
+  /* ============ Installed apps grid ============ */
+  function loadApps() {
+    const apps = JSON.parse(Android.getInstalledApps());
+    $("appCount").textContent = "(" + apps.length + " apps)";
+    const grid = $("apps");
+    grid.innerHTML = apps.map(a => {
+      const icon = a.Icon
+        ? `<img src="${a.Icon}" alt="">`
+        : `<div class="fallback">${escapeHtml((a.Name[0] || "?").toUpperCase())}</div>`;
+      return `<div class="app-tile" title="${escapeHtml(a.Package)}">${icon}<div class="label">${escapeHtml(a.Name)}</div></div>`;
+    }).join("");
+  }
+
+  /* ============ helpers ============ */
   function itemHTML(name, meta, details) {
     return (
       '<details class="item">' +
