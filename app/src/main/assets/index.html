@@ -306,6 +306,9 @@
   .more-wrap .kv-table {
     border: none; border-radius: 0; background: transparent;
   }
+
+  .item > summary .name { min-width: 0; flex: 1; }
+  .item > summary .meta { display: inline-flex; align-items: center; gap: 4px; }
 </style>
 </head>
 <body>
@@ -547,7 +550,7 @@
     }
     return '<details class="item">' +
       '<summary><span class="name">' + esc(name) + '</span>' +
-      '<span class="meta">' + esc(meta) + '</span></summary>' +
+      '<span class="meta">' + meta + '</span></summary>' +
       '<div class="body">' + bodyHtml + '</div></details>';
   }
 
