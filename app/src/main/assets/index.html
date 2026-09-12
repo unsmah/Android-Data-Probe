@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Native Data Probe</title>
 <style>
-  body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:18px; }
+  body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:18px; padding-bottom:60px; }
   h1 { font-size:20px; color:#a8b2ff; margin-bottom:8px; }
   h2 { font-size:15px; color:#7c8cff; border-bottom:1px solid #1f2430;
        padding-bottom:5px; margin-top:28px; }
@@ -13,67 +13,96 @@
   dl { display:grid; grid-template-columns: 40% 1fr; gap:6px 14px; font-size:13px; }
   dt { color:#8b93a5; }
   dd { font-family: monospace; word-break: break-all; margin:0; }
-  pre { font-size:11.5px; max-height:240px; overflow:auto; background:#12151f;
+  pre { font-size:11.5px; max-height:260px; overflow:auto; background:#12151f;
         padding:12px; border-radius:8px; margin:0; line-height:1.55;
         white-space:pre-wrap; word-break:break-all; }
   button { font:inherit; font-size:13px; padding:9px 14px; border-radius:8px;
            border:1px solid #2c3346; background:#171b26; color:#e6e8ee;
            cursor:pointer; margin:0 6px 8px 0; }
   button:active { background:#232a3a; }
-  .banner { display:none; background:#2a1a12; border:1px solid #5a3a1a;
-            color:#f5c76e; padding:12px 14px; border-radius:10px; margin:14px 0;
-            font-size:13.5px; }
-  .banner button { background:#3a2412; border-color:#5a3a1a; color:#f5c76e;
-                   padding:6px 12px; font-size:12.5px; margin-left:8px; }
+  button.primary { background:#1e2c4a; border-color:#2f4a7a; color:#cfe0ff; }
+
+  /* top-of-page sticky overlay until permissions are ready */
+  .permbar {
+    position:sticky; top:0; z-index:10;
+    background:#2a1a12; border:1px solid #5a3a1a; color:#f5c76e;
+    padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:13.5px;
+    display:none;
+  }
+  .permbar.show { display:block; }
+  .permbar .row { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
+  .permbar button { background:#3a2412; border-color:#5a3a1a; color:#f5c76e;
+                    padding:7px 12px; font-size:12.5px; }
+  .permbar .ok { color:#6fd08c; }
+
+  /* clickable list items */
+  .item { background:#12151f; border:1px solid #1f2430; border-radius:10px;
+          margin-bottom:8px; overflow:hidden; }
+  .item > summary {
+    list-style:none; cursor:pointer; padding:11px 14px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    font-size:13.5px;
+  }
+  .item > summary::-webkit-details-marker { display:none; }
+  .item > summary .name { font-weight:600; word-break:break-word; }
+  .item > summary .meta { color:#8b93a5; font-size:12px; font-family:monospace; flex-shrink:0; }
+  .item[open] > summary { background:#181d28; }
+  .item .body {
+    padding:10px 14px 13px; border-top:1px solid #1f2430;
+    font-size:12.5px; font-family:monospace; color:#b8c1d4;
+    white-space:pre-wrap; word-break:break-all; line-height:1.6;
+  }
+  .empty { color:#6b7488; font-size:12.5px; padding:10px 0; }
+  .sig-strong { color:#4ade80; }
+  .sig-ok { color:#f5c76e; }
+  .sig-weak { color:#f87171; }
 </style>
 </head>
 <body>
-<h1>Native Android Data Probe</h1>
 
-<div class="banner" id="locBanner">
-  ⚠️ Location services are off. Wi-Fi scan results will be empty.
-  <button onclick="Android.openLocationSettings()">Turn on location</button>
+<div class="permbar" id="permBar">
+  <div id="permMsg">Some permissions are missing — the app can't gather all data yet.</div>
+  <div class="row">
+    <button id="btnPerms" class="primary">Grant permissions</button>
+    <button id="btnLoc">Turn on location</button>
+    <button id="btnBt">Turn on Bluetooth</button>
+  </div>
 </div>
 
-<h2>Device & OS</h2>
+<h1>Native Android Data Probe</h1>
+
+<h2>Device &amp; OS</h2>
 <dl id="device"></dl>
 
 <h2>Wi-Fi</h2>
 <h3>Current connection</h3>
 <dl id="wifi"></dl>
 
-<h3>Saved networks</h3>
-<button onclick="loadSavedWifi()">Load saved networks</button>
-<pre id="savedWifi">Tap the button to load.</pre>
-
 <h3>Live scan</h3>
 <button onclick="startWifiScan()">Scan now</button>
-<pre id="wifiScan">Tap Scan to see nearby networks.</pre>
+<pre id="wifiScan" style="display:none"></pre>
+<div id="wifiList"></div>
 
 <h2>Bluetooth</h2>
 <h3>Paired devices</h3>
-<pre id="bluetooth">Loading…</pre>
+<div id="btPaired"></div>
 
 <h3>Live discovery</h3>
 <button onclick="startBtScan()">Start scan</button>
 <button onclick="Android.stopBluetoothDiscovery()">Stop</button>
-<pre id="btScan">Tap Start to discover nearby devices. Scan runs ~12 seconds.</pre>
+<div id="btList"></div>
 
 <h2>Location</h2>
 <dl id="location"></dl>
 
-<h2>Installed Apps (first 30)</h2>
-<pre id="apps"></pre>
-
-<h2>Accounts</h2>
-<pre id="accounts"></pre>
+<h2>Installed Apps</h2>
+<div id="apps" style="font-size:13px; line-height:1.7;"></div>
 
 <script>
   const $ = id => document.getElementById(id);
 
   const render = (id, data) => {
-    const el = $(id);
-    if (!el || !data) return;
+    const el = $(id); if (!el || !data) return;
     el.innerHTML = "";
     for (const [k, v] of Object.entries(data)) {
       const dt = document.createElement("dt"); dt.textContent = k;
@@ -83,103 +112,167 @@
     }
   };
 
+  /* ---------- signal bars ---------- */
+  const strengthClass = rssi =>
+    rssi >= -60 ? "sig-strong" : rssi >= -75 ? "sig-ok" : "sig-weak";
+
+  const freqBand = f =>
+    f >= 5925 ? "6 GHz" : f >= 4900 ? "5 GHz" : f >= 2400 ? "2.4 GHz" : f + " MHz";
+
   /* ---------- initial load ---------- */
   render("device", JSON.parse(Android.getDeviceInfo()));
   render("wifi", JSON.parse(Android.getWifiInfo()));
   render("location", JSON.parse(Android.getLocation()));
 
   const bonded = JSON.parse(Android.getBluetoothBondedDevices());
-  $("bluetooth").textContent = bonded.length
-    ? bonded.map(d => `${d.Name} | ${d.Address}`).join("\n")
-    : "No paired devices.";
+  $("btPaired").innerHTML = bonded.length
+    ? bonded.map(d => itemHTML(
+        d.Name, d.Address,
+        `Address:  ${d.Address}\nType:     ${d.Type}\nPaired:   yes`
+      )).join("")
+    : '<div class="empty">No paired devices.</div>';
 
   const apps = JSON.parse(Android.getInstalledApps());
-  $("apps").textContent = apps.slice(0, 30)
-    .map(a => `${a.Name}  (${a.Package})`).join("\n");
+  $("apps").textContent = apps.map(a => a.Name).join("\n");
 
-  const accounts = JSON.parse(Android.getAccounts());
-  $("accounts").textContent = accounts.length
-    ? accounts.map(a => `${a.Name} [${a.Type}]`).join("\n")
-    : "No accounts found.";
+  /* ---------- permission state ---------- */
+  const permBar = $("permBar");
 
-  if (!Android.isLocationEnabled()) $("locBanner").style.display = "block";
+  window.onPermissionsChanged = function (allGranted, locOn, btOn) {
+    const needsPerms = !allGranted;
+    const needsLoc = allGranted && !locOn;
+    const needsBt = allGranted && !btOn;
 
-  /* ---------- saved Wi-Fi ---------- */
-  window.loadSavedWifi = function () {
-    const data = JSON.parse(Android.getSavedWifiNetworks());
-    if (!data.length) {
-      $("savedWifi").textContent =
-        "(no saved networks returned)\n\n" +
-        "On Android 10+, getConfiguredNetworks() returns empty for regular apps " +
-        "unless the app is a device owner or has carrier privileges. The list below " +
-        "is only populated on older Android or with system-level access.";
-      return;
-    }
-    $("savedWifi").textContent = data.map(n =>
-      n.error ? "error: " + n.error
-              : `${n.SSID}\n  BSSID: ${n.BSSID}  id: ${n.NetworkId}  priority: ${n.Priority}`
-    ).join("\n\n");
+    if (!needsPerms && !needsLoc && !needsBt) { permBar.classList.remove("show"); return; }
+
+    permBar.classList.add("show");
+    let msg = "";
+    if (needsPerms) msg = "Permissions missing — grant them so the app can work.";
+    else if (needsLoc && needsBt) msg = "Location and Bluetooth are off — some data won't be available.";
+    else if (needsLoc) msg = "Location is off — Wi-Fi scan results will be empty.";
+    else if (needsBt) msg = "Bluetooth is off — no Bluetooth devices will be found.";
+
+    $("permMsg").textContent = msg;
+    $("btnPerms").style.display = needsPerms ? "" : "none";
+    $("btnLoc").style.display = needsLoc ? "" : "none";
+    $("btnBt").style.display = needsBt ? "" : "none";
   };
 
-  /* ---------- live Wi-Fi scan ---------- */
+  $("btnPerms").onclick = () => Android.requestPermissionsFromUi();
+  $("btnLoc").onclick = () => Android.enableLocationFromUi();
+  $("btnBt").onclick = () => Android.enableBluetoothFromUi();
+
+  // initial pull
+  (function () {
+    const st = JSON.parse(Android.getPermissionStatus());
+    window.onPermissionsChanged(st.allGranted, st.locationEnabled, st.bluetoothEnabled);
+  })();
+
+  window.onLocationStateChanged = function (on) {
+    const st = JSON.parse(Android.getPermissionStatus());
+    window.onPermissionsChanged(st.allGranted, on, st.bluetoothEnabled);
+    if (on) render("location", JSON.parse(Android.getLocation()));
+  };
+
+  /* ---------- Wi-Fi live scan ---------- */
   window.startWifiScan = function () {
-    $("wifiScan").textContent = "Scanning…";
+    $("wifiList").innerHTML = '<div class="empty">Scanning…</div>';
     Android.startWifiScan();
   };
 
   window.onWifiScanComplete = function (results) {
     if (!results.length) {
-      $("wifiScan").textContent =
-        "No networks found. Check:\n" +
-        "  • Location services are ON\n" +
-        "  • Location permission granted\n" +
-        "  • Wait ~30s between scans (Android rate-limits scans)";
+      $("wifiList").innerHTML =
+        '<div class="empty">No networks found. Check that location services are on, ' +
+        'permission is granted, and wait ~30s between scans (Android rate-limits).</div>';
       return;
     }
     results.sort((a, b) => b.Level - a.Level);
-    $("wifiScan").textContent = results.map(n =>
-      `${n.SSID || "(hidden)"}  ${n.Level}dBm\n  ${n.BSSID}  ${n.Frequency}MHz  ${n.Capabilities}`
-    ).join("\n\n");
+    $("wifiList").innerHTML = results.map(n => {
+      const name = n.SSID || "(hidden network)";
+      return itemHTML(
+        name,
+        `${n.Level}dBm`,
+        `SSID:        ${name}\n` +
+        `BSSID:       ${n.BSSID}\n` +
+        `Signal:      ${n.Level} dBm\n` +
+        `Frequency:   ${n.Frequency} MHz  (${freqBand(n.Frequency)})\n` +
+        `Capabilities: ${n.Capabilities || "(open)"}`
+      );
+    }).join("");
   };
 
   window.onWifiScanError = function (msg) {
-    $("wifiScan").textContent = "Scan error: " + msg;
+    $("wifiList").innerHTML = '<div class="empty">Scan error: ' + escapeHtml(msg) + '</div>';
   };
 
-  /* ---------- live Bluetooth discovery ---------- */
-  const seenBt = new Set();
+  /* ---------- Bluetooth live discovery ---------- */
+  const btSeen = new Set();
 
   window.startBtScan = function () {
-    seenBt.clear();
-    $("btScan").textContent = "Scanning…";
+    btSeen.clear();
+    $("btList").innerHTML = '<div class="empty">Scanning…</div>';
     Android.startBluetoothDiscovery();
   };
 
-  window.onBluetoothDeviceFound = function (device) {
-    if (seenBt.has(device.Address)) return;
-    seenBt.add(device.Address);
-    const line = `${device.Name}\n  ${device.Address}  ${device.RSSI}dBm${device.Bonded ? "  [paired]" : ""}`;
-    const el = $("btScan");
-    el.textContent = (el.textContent === "Scanning…") ? line : el.textContent + "\n\n" + line;
+  window.onBluetoothDeviceFound = function (d) {
+    if (btSeen.has(d.Address)) return;
+    btSeen.add(d.Address);
+    const first = btSeen.size === 1;
+    if (first) $("btList").innerHTML = "";
+
+    const html = itemHTML(
+      d.Name,
+      `${d.RSSI}dBm`,
+      `Name:     ${d.Name}\n` +
+      `Address:  ${d.Address}\n` +
+      `RSSI:     ${d.RSSI} dBm\n` +
+      `Type:     ${deviceTypeLabel(d.Type)}\n` +
+      `Paired:   ${d.Bonded ? "yes" : "no"}\n` +
+      `Source:   ${d.Source === "ble" ? "BLE advertisement" : "Classic discovery"}`
+    );
+    $("btList").insertAdjacentHTML("beforeend", html);
   };
 
   window.onBluetoothScanComplete = function () {
-    const el = $("btScan");
-    if (el.textContent === "Scanning…" || !el.textContent.trim()) {
-      el.textContent = "(no devices found)";
-    }
-    el.textContent += "\n\n— scan complete —";
+    if (btSeen.size === 0)
+      $("btList").innerHTML = '<div class="empty">No devices found. Make sure nearby devices are discoverable.</div>';
+    else
+      $("btList").insertAdjacentHTML("beforeend",
+        '<div class="empty">— scan complete (' + btSeen.size + ' device' +
+        (btSeen.size === 1 ? "" : "s") + ') —</div>');
   };
 
   window.onBluetoothError = function (msg) {
-    $("btScan").textContent = "Error: " + msg;
+    $("btList").innerHTML = '<div class="empty">Error: ' + escapeHtml(msg) + '</div>';
   };
 
-  /* ---------- location state callback ---------- */
-  window.onLocationStateChanged = function (on) {
-    $("locBanner").style.display = on ? "none" : "block";
-    if (on) render("location", JSON.parse(Android.getLocation()));
-  };
+  /* ---------- helpers ---------- */
+  function itemHTML(name, meta, details) {
+    return (
+      '<details class="item">' +
+        '<summary>' +
+          '<span class="name">' + escapeHtml(name) + '</span>' +
+          '<span class="meta">' + escapeHtml(meta) + '</span>' +
+        '</summary>' +
+        '<div class="body">' + escapeHtml(details) + '</div>' +
+      '</details>'
+    );
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
+  function deviceTypeLabel(t) {
+    switch (t) {
+      case 1: return "Classic";
+      case 2: return "LE";
+      case 3: return "Dual (Classic + LE)";
+      default: return "Unknown";
+    }
+  }
 </script>
 </body>
 </html>
