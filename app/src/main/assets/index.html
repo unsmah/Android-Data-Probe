@@ -297,17 +297,17 @@
 
   window.openInMaps = function () {
     if (currentLat == null) return;
-    window.open("https://www.google.com/maps?q=" + currentLat + "," + currentLon, "_blank");
+    // location.assign triggers shouldOverrideUrlLoading, which opens externally
+    location.href = "https://www.google.com/maps?q=" + currentLat + "," + currentLon;
   };
-  // expose as global for the button
-  window.openInMaps = window.openInMaps;
   document.getElementById("btnMaps").onclick = window.openInMaps;
 
   /* ============ Leaflet map ============ */
   let map = null, marker = null, trail = null, trailPoints = [];
 
   function initMap() {
-    if (map) return;
+    if (map) { setTimeout(() => map.invalidateSize(), 50); return; }
+    if (typeof L === "undefined") { setTimeout(initMap, 120); return; }
     map = L.map("map", { zoomControl: true, attributionControl: true }).setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -319,6 +319,10 @@
       fillOpacity: 0.9, weight: 3
     }).addTo(map);
     map.setView([0, 0], 2);
+    // WebView layout can settle late — force Leaflet to recompute size a few times.
+    setTimeout(() => map.invalidateSize(), 100);
+    setTimeout(() => map.invalidateSize(), 500);
+    setTimeout(() => map.invalidateSize(), 1500);
   }
 
   window.refreshMap = function () {
@@ -428,29 +432,25 @@
   let currentFilter = "all";
 
   window.loadApps = function () {
-    if (appsCache) {
-      renderApps(appsCache, currentFilter);
-      $("btnLoadApps").style.display = "none";
-      $("appFilter").style.display = "";
-      return;
-    }
     const btn = $("btnLoadApps");
     btn.disabled = true;
     btn.textContent = "Loading…";
-    // Give the browser a frame to paint the loading state before the
-    // synchronous Java call blocks the JS thread.
-    setTimeout(() => {
-      try {
-        appsCache = JSON.parse(Android.getInstalledApps("all"));
-        renderApps(appsCache, currentFilter);
-        btn.style.display = "none";
-        $("appFilter").style.display = "";
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = "Retry loading apps";
-        alert("Failed to load apps: " + e.message);
-      }
-    }, 60);
+    $("apps").innerHTML = "";
+    // Java runs on a background thread and calls window.onAppsLoaded when done.
+    Android.loadAppsAsync("all");
+  };
+
+  window.onAppsLoaded = function (apps) {
+    appsCache = apps;
+    const btn = $("btnLoadApps");
+    btn.disabled = false;
+    btn.textContent = "Reload apps";
+    $("appFilter").style.display = "";
+    // Mark current filter as active
+    document.querySelectorAll("#appFilter button").forEach(b => {
+      b.classList.toggle("primary", b.dataset.f === currentFilter);
+    });
+    renderApps(appsCache, currentFilter);
   };
 
   window.filterApps = function (f) {
@@ -502,8 +502,21 @@
     }
   }
 
-  /* Load history on first paint so the trail shows if present */
-  setTimeout(() => { try { initMap(); drawHistory(JSON.parse(Android.getLocationHistory())); } catch (e) {} }, 300);
+  /* Load map + history once layout has settled */
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      try {
+        initMap();
+        const hist = JSON.parse(Android.getLocationHistory());
+        drawHistory(hist);
+        if (hist.length) {
+          const last = hist[hist.length - 1];
+          marker.setLatLng([last.lat, last.lon]);
+          map.setView([last.lat, last.lon], 15);
+        }
+      } catch (e) { console.warn("map init failed:", e); }
+    }, 350);
+  });
 </script>
 </body>
 </html>
