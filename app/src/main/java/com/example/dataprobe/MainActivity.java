@@ -75,6 +75,10 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isWifiScanning = false;
     private boolean isBluetoothScanning = false;
+    private boolean liveWifiScanning = false;
+    private static final int LIVE_SCAN_INTERVAL_MS = 35000;
+    private static final String WIFI_HISTORY_FILE = "wifi_scan_history.json";
+    private static final int WIFI_HISTORY_MAX = 200;
     private final Map<String, JSONObject> btSeen = new HashMap<>();
     private final Handler scanHandler = new Handler(Looper.getMainLooper());
 
@@ -402,53 +406,31 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void startWifiScan() {
+            runOnUiThread(() -> MainActivity.this.startWifiScanInternal(true, false));
+        }
+
+        @JavascriptInterface
+        public void startLiveWifiScan() {
             runOnUiThread(() -> {
-                if (isWifiScanning) return;
-                if (!wifiManager.isWifiEnabled()) {
-                    webView.evaluateJavascript(
-                        "window.onWifiScanError('Wi-Fi is off. Turn it on in the top banner.')", null);
-                    return;
-                }
-                isWifiScanning = true;
-                wifiScanReceiver = new BroadcastReceiver() {
-                    @Override public void onReceive(Context ctx, Intent intent) { pushWifiResults(); }
-                };
-                IntentFilter filter = new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-                if (Build.VERSION.SDK_INT >= 33) registerReceiver(wifiScanReceiver, filter, Context.RECEIVER_EXPORTED);
-                else registerReceiver(wifiScanReceiver, filter);
-                try { wifiManager.startScan(); }
-                catch (Exception e) {
-                    webView.post(() -> webView.evaluateJavascript(
-                        "window.onWifiScanError('" + escape(e.getMessage()) + "')", null));
-                }
-                scanHandler.postDelayed(() -> { if (wifiScanReceiver != null) pushWifiResults(); }, 6000);
+                if (liveWifiScanning) return;
+                liveWifiScanning = true;
+                MainActivity.this.startWifiScanInternal(true, true);
             });
         }
 
-        private void pushWifiResults() {
-            if (wifiScanReceiver == null) return;
-            try {
-                List<android.net.wifi.ScanResult> results = wifiManager.getScanResults();
-                JSONArray arr = new JSONArray();
-                if (results != null) {
-                    for (android.net.wifi.ScanResult r : results) {
-                        JSONObject o = new JSONObject();
-                        o.put("SSID", r.SSID);
-                        o.put("BSSID", r.BSSID);
-                        o.put("Level", r.level);
-                        o.put("Frequency", r.frequency);
-                        o.put("Capabilities", r.capabilities);
-                        arr.put(o);
-                    }
-                }
-                final String js = "window.onWifiScanComplete(" + arr + ")";
-                webView.post(() -> webView.evaluateJavascript(js, null));
-            } catch (Exception ignored) {
-            } finally {
-                isWifiScanning = false;
-                try { unregisterReceiver(wifiScanReceiver); } catch (Exception ignored) {}
-                wifiScanReceiver = null;
-            }
+        @JavascriptInterface
+        public void stopLiveWifiScan() {
+            runOnUiThread(() -> { liveWifiScanning = false; });
+        }
+
+        @JavascriptInterface
+        public String getWifiScanHistory() { return MainActivity.this.readWifiHistory().toString(); }
+
+        @JavascriptInterface
+        public void clearWifiScanHistory() {
+            runOnUiThread(() -> {
+                try { MainActivity.this.wifiHistoryFile().delete(); } catch (Exception ignored) {}
+            });
         }
 
         /* ===== Bluetooth ===== */
@@ -768,6 +750,104 @@ public class MainActivity extends AppCompatActivity {
         private String escape(String s) {
             return s == null ? "" : s.replace("\\", "\\\\").replace("'", "\\'");
         }
+    }
+
+    /* ================= WiFi scan internals ================= */
+
+    private void startWifiScanInternal(boolean saveToHistory, boolean scheduleNext) {
+        if (isWifiScanning) return;
+        if (!wifiManager.isWifiEnabled()) {
+            webView.evaluateJavascript(
+                "window.onWifiScanError('Wi-Fi is off. Turn it on in the top banner.')", null);
+            liveWifiScanning = false;
+            return;
+        }
+        isWifiScanning = true;
+        wifiScanReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context ctx, Intent intent) {
+                pushWifiResultsInternal(saveToHistory, scheduleNext);
+            }
+        };
+        IntentFilter filter = new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(wifiScanReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(wifiScanReceiver, filter);
+        }
+        try { wifiManager.startScan(); } catch (Exception ignored) {}
+        scanHandler.postDelayed(() -> {
+            if (wifiScanReceiver != null) pushWifiResultsInternal(saveToHistory, scheduleNext);
+        }, 6000);
+    }
+
+    private void pushWifiResultsInternal(boolean saveToHistory, boolean scheduleNext) {
+        if (wifiScanReceiver == null) return;
+        try {
+            List<android.net.wifi.ScanResult> results = wifiManager.getScanResults();
+            JSONArray arr = new JSONArray();
+            if (results != null) {
+                for (android.net.wifi.ScanResult r : results) {
+                    JSONObject o = new JSONObject();
+                    o.put("SSID", r.SSID);
+                    o.put("BSSID", r.BSSID);
+                    o.put("Level", r.level);
+                    o.put("Frequency", r.frequency);
+                    o.put("Capabilities", r.capabilities);
+                    arr.put(o);
+                }
+            }
+            if (saveToHistory && arr.length() > 0) saveWifiScanToHistory(arr);
+            final String js = "window.onWifiScanComplete(" + arr + ")";
+            webView.post(() -> webView.evaluateJavascript(js, null));
+        } catch (Exception ignored) {
+        } finally {
+            isWifiScanning = false;
+            try { unregisterReceiver(wifiScanReceiver); } catch (Exception ignored) {}
+            wifiScanReceiver = null;
+            if (scheduleNext && liveWifiScanning) {
+                scanHandler.postDelayed(() -> {
+                    if (liveWifiScanning) startWifiScanInternal(true, true);
+                }, LIVE_SCAN_INTERVAL_MS);
+            }
+        }
+    }
+
+    private File wifiHistoryFile() { return new File(getFilesDir(), WIFI_HISTORY_FILE); }
+
+    private JSONArray readWifiHistory() {
+        try {
+            File f = wifiHistoryFile();
+            if (!f.exists()) return new JSONArray();
+            String txt = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            return new JSONArray(txt);
+        } catch (Exception e) { return new JSONArray(); }
+    }
+
+    private void writeWifiHistory(JSONArray arr) {
+        try {
+            Files.write(wifiHistoryFile().toPath(), arr.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+    }
+
+    private void saveWifiScanToHistory(JSONArray networks) {
+        try {
+            JSONArray history = readWifiHistory();
+            JSONObject entry = new JSONObject();
+            entry.put("t", System.currentTimeMillis());
+            try {
+                Location loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                if (loc == null) loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                if (loc != null) {
+                    entry.put("lat", loc.getLatitude());
+                    entry.put("lon", loc.getLongitude());
+                    entry.put("acc", loc.getAccuracy());
+                }
+            } catch (Exception ignored) {}
+            entry.put("networks", networks);
+            history.put(entry);
+            while (history.length() > WIFI_HISTORY_MAX) history.remove(0);
+            writeWifiHistory(history);
+        } catch (Exception ignored) {}
     }
 
     @Override

@@ -282,8 +282,16 @@
     <h2>Nearby networks</h2>
     <div class="btn-row">
       <button class="btn btn-primary" id="btnScanWifi">Scan now</button>
+      <button class="btn" id="btnLiveWifi">Start live scan</button>
     </div>
     <div id="wifiList"></div>
+
+    <h2>Scan history</h2>
+    <div class="btn-row">
+      <button class="btn" id="btnShowWifiHistory">Show history</button>
+      <button class="btn btn-danger" id="btnClearWifiHistory">Clear</button>
+    </div>
+    <div id="wifiHistory"></div>
   </section>
 
   <!-- ================= BLUETOOTH ================= -->
@@ -503,34 +511,127 @@
      ========================================================= */
   renderDL($("wifiInfo"), safeJSON(Android.getWifiInfo(), {}));
 
+  /* Signal bars renderer */
+  function signalInfo(rssi) {
+    const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
+    const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+    const color = bars === 4 ? "#4ade80" : bars === 3 ? "#a3e635"
+                : bars === 2 ? "#f5c76e" : "#f87171";
+    let svg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
+    for (let i = 0; i < 4; i++) {
+      const h = 4 + i * 3;
+      svg += '<rect x="' + (i * 5) + '" y="' + (16 - h) +
+             '" width="3.5" height="' + h + '" rx="1" fill="' +
+             (i < bars ? color : '#2c3346') + '"/>';
+    }
+    svg += '</svg>';
+    return { svg, pct, color, bars };
+  }
+
+  function wifiItemHTML(n) {
+    const name = n.SSID || "(hidden network)";
+    const sig = signalInfo(n.Level);
+    const metaHTML = sig.svg + '<span style="color:' + sig.color +
+                     ';font-weight:600;">' + sig.pct + '%</span>';
+    const detail =
+      "SSID:         " + name + "\n" +
+      "BSSID:        " + n.BSSID + "\n" +
+      "Signal:       " + n.Level + " dBm (" + sig.pct + "%)\n" +
+      "Bars:         " + sig.bars + " / 4\n" +
+      "Frequency:    " + n.Frequency + " MHz (" + freqBand(n.Frequency) + ")\n" +
+      "Capabilities: " + (n.Capabilities || "(open network)");
+    return '<details class="item">' +
+      '<summary><span class="name">' + esc(name) + '</span>' +
+      '<span class="meta">' + metaHTML + '</span></summary>' +
+      '<div class="body">' + esc(detail) + '</div></details>';
+  }
+
+  let liveWifiScanning = false;
+
   $("btnScanWifi").addEventListener("click", () => {
     $("btnScanWifi").disabled = true;
     $("wifiList").innerHTML = '<div class="loading">Scanning nearby networks…</div>';
     Android.startWifiScan();
   });
 
+  $("btnLiveWifi").addEventListener("click", () => {
+    if (liveWifiScanning) {
+      Android.stopLiveWifiScan();
+      liveWifiScanning = false;
+      $("btnLiveWifi").textContent = "Start live scan";
+      $("btnLiveWifi").classList.remove("btn-danger");
+      $("btnLiveWifi").classList.add("btn-primary");
+    } else {
+      liveWifiScanning = true;
+      $("btnLiveWifi").textContent = "Stop live scan";
+      $("btnLiveWifi").classList.remove("btn-primary");
+      $("btnLiveWifi").classList.add("btn-danger");
+      $("wifiList").innerHTML = '<div class="loading">Live scanning… (every ~35s)</div>';
+      Android.startLiveWifiScan();
+    }
+  });
+
   window.onWifiScanComplete = function (results) {
     $("btnScanWifi").disabled = false;
     if (!results.length) {
-      $("wifiList").innerHTML = '<div class="empty">No networks found.<br>Check Location is on, or wait ~30s between scans.</div>';
+      if (!liveWifiScanning)
+        $("wifiList").innerHTML = '<div class="empty">No networks found.<br>Check Location is on, or wait ~30s between scans.</div>';
       return;
     }
     results.sort((a, b) => b.Level - a.Level);
-    $("wifiList").innerHTML = results.map(n => {
-      const name = n.SSID || "(hidden network)";
-      return itemHTML(name, n.Level + "dBm",
-        "SSID:         " + name + "\n" +
-        "BSSID:        " + n.BSSID + "\n" +
-        "Signal:       " + n.Level + " dBm\n" +
-        "Frequency:    " + n.Frequency + " MHz  (" + freqBand(n.Frequency) + ")\n" +
-        "Capabilities: " + (n.Capabilities || "(open)"));
-    }).join("");
+    $("wifiList").innerHTML = results.map(wifiItemHTML).join("");
   };
 
   window.onWifiScanError = function (msg) {
     $("btnScanWifi").disabled = false;
-    $("wifiList").innerHTML = '<div class="empty">Scan error: ' + esc(msg) + '</div>';
+    if (!liveWifiScanning)
+      $("wifiList").innerHTML = '<div class="empty">Scan error: ' + esc(msg) + '</div>';
   };
+
+  /* ---- Wi-Fi scan history ---- */
+  $("btnShowWifiHistory").addEventListener("click", () => {
+    const history = safeJSON(Android.getWifiScanHistory(), []);
+    if (!history.length) {
+      $("wifiHistory").innerHTML = '<div class="empty">No scan history yet. Run a scan first.</div>';
+      return;
+    }
+    const recent = history.slice().reverse();
+    $("wifiHistory").innerHTML = recent.map(scan => {
+      const d = new Date(scan.t);
+      const timeStr = d.toLocaleString();
+      const nets = scan.networks || [];
+      const netCount = nets.length;
+      const metaHTML = netCount + " nets";
+
+      let locLine = "Location:   (not available)";
+      let locMapLine = "";
+      if (typeof scan.lat === "number") {
+        locLine = "Location:   " + scan.lat.toFixed(5) + ", " + scan.lon.toFixed(5) +
+                  (scan.acc ? "  (\u00b1" + Math.round(scan.acc) + "m)" : "");
+        locMapLine = "\nMaps:       https://www.google.com/maps?q=" + scan.lat + "," + scan.lon;
+      }
+
+      const netLines = nets.map(n => {
+        const pct = Math.max(0, Math.min(100, Math.round(2 * (n.level + 100))));
+        return "  " + (n.ssid || "(hidden)") + "\n    " + n.bssid +
+               "  " + n.level + " dBm (" + pct + "%)  " + n.freq + " MHz";
+      }).join("\n");
+
+      const body = "Scanned:    " + timeStr + "\n" + locLine + locMapLine +
+                   "\n\nNetworks (" + netCount + "):\n" + netLines;
+
+      return '<details class="item">' +
+        '<summary><span class="name">' + esc(timeStr) + '</span>' +
+        '<span class="meta">' + esc(metaHTML) + '</span></summary>' +
+        '<div class="body">' + esc(body) + '</div></details>';
+    }).join("");
+  });
+
+  $("btnClearWifiHistory").addEventListener("click", () => {
+    if (!confirm("Clear all Wi-Fi scan history?")) return;
+    Android.clearWifiScanHistory();
+    $("wifiHistory").innerHTML = '<div class="empty">History cleared.</div>';
+  });
 
   /* =========================================================
      Bluetooth
