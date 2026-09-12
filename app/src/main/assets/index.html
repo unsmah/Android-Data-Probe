@@ -225,6 +225,62 @@
     width: 28px; height: 2.5px; border-radius: 0 0 3px 3px;
     background: var(--accent);
   }
+
+  /* ---- WiFi history cards ---- */
+  .net-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 11px; padding: 14px 16px; margin-bottom: 8px;
+    cursor: pointer; display: flex; align-items: center; gap: 12px;
+    transition: background .15s;
+  }
+  .net-card:active { background: var(--card2); }
+  .net-card .left { flex: 1; min-width: 0; }
+  .net-card .net-ssid {
+    font-weight: 600; font-size: 15px; word-break: break-word;
+    margin-bottom: 3px;
+  }
+  .net-card .net-sub {
+    font-size: 11.5px; color: var(--text-dim);
+    font-family: ui-monospace, monospace;
+  }
+  .net-card .chev { color: var(--text-faint); font-size: 22px; flex-shrink: 0; }
+
+  /* ---- Sighting rows in detail ---- */
+  .sighting-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .sighting-info { flex: 1; min-width: 0; }
+  .sighting-time {
+    color: var(--text-dim); font-family: ui-monospace, monospace;
+    font-size: 12px; margin-bottom: 3px;
+  }
+  .sighting-sig {
+    color: var(--text-dim); font-family: ui-monospace, monospace;
+    font-size: 11.5px; white-space: nowrap;
+  }
+  .mini-btn {
+    background: var(--card2); border: 1px solid var(--border-hi);
+    color: var(--accent); padding: 6px 12px; border-radius: 8px;
+    font: inherit; font-size: 12px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mini-btn:active { background: #232a3a; }
+  .mini-muted {
+    color: var(--text-faint); font-size: 11px;
+    font-style: italic; flex-shrink: 0;
+  }
+
+  /* ---- WiFi in-app map ---- */
+  #wifiMap {
+    height: 380px; border-radius: 12px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--border);
+    margin-top: 10px;
+  }
+
 </style>
 </head>
 <body>
@@ -250,7 +306,8 @@
 
   <!-- ================= WI-FI ================= -->
   <section id="tab-wifi" class="tab">
-    <!-- Root view -->
+
+    <!-- View: root -->
     <div id="wifiViewRoot">
       <h1>Wi-Fi</h1>
       <h2>Current connection</h2>
@@ -261,35 +318,46 @@
         <button class="btn" id="btnLiveWifi">Start live scan</button>
       </div>
       <div id="wifiList"></div>
-      <h2>Wi-Fi history</h2>
-      <button class="btn btn-primary" id="btnWifiNetworks" style="width:100%;">Open Wi-Fi history</button>
+      <h2>History</h2>
+      <button class="btn btn-primary" id="btnOpenWifiHistory" style="width:100%;">Show history</button>
     </div>
 
-    <!-- Networks list view -->
-    <div id="wifiViewNetworks" style="display:none;">
+    <!-- View: history list (unique WiFi names) -->
+    <div id="wifiViewHistory" style="display:none;">
       <div class="back-bar">
-        <button class="back-btn" id="wifiBackToRoot">← Wi-Fi</button>
+        <button class="back-btn" id="wifiBackRoot">&#8592; Wi-Fi</button>
       </div>
       <h1>Wi-Fi history</h1>
-      <p class="subtitle" id="wifiNetworksSummary"></p>
-      <div id="wifiNetworksList"></div>
-      <button class="btn btn-danger" id="btnClearWifiNetworks" style="width:100%;">Clear all history</button>
+      <p class="subtitle" id="wifiHistorySummary"></p>
+      <div id="wifiHistoryList"></div>
+      <button class="btn btn-danger" id="btnClearWifiHistory" style="width:100%;">Clear all history</button>
     </div>
 
-    <!-- Detail view -->
-    <div id="wifiViewDetail" style="display:none;">
+    <!-- View: network detail -->
+    <div id="wifiViewNetwork" style="display:none;">
       <div class="back-bar">
-        <button class="back-btn" id="wifiBackToNetworks">← History</button>
+        <button class="back-btn" id="wifiBackHistory">&#8592; History</button>
       </div>
-      <h1 id="wifiDetailTitle"></h1>
-      <p class="subtitle" id="wifiDetailSubtitle"></p>
-      <h2>Summary</h2>
-      <dl id="wifiDetailInfo"></dl>
-      <h2>Connections <span id="wifiDetailConnCount" style="font-size:11px;color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
-      <div id="wifiDetailConnections"></div>
-      <h2>Sightings <span id="wifiDetailSigCount" style="font-size:11px;color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
-      <div id="wifiDetailSightings"></div>
+      <h1 id="wifiNetTitle"></h1>
+      <p class="subtitle" id="wifiNetSubtitle"></p>
+      <dl id="wifiNetCounts"></dl>
+      <div class="btn-row" style="margin-top:14px;">
+        <button class="btn btn-primary" id="btnShowLatestMap" style="width:100%;">&#128205; Show latest location on map</button>
+      </div>
+      <button class="btn" id="btnToggleSightings" style="width:100%;">Show all scan times &#9662;</button>
+      <div id="wifiNetSightings" style="display:none; margin-top:10px;"></div>
     </div>
+
+    <!-- View: map -->
+    <div id="wifiViewMap" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="wifiBackMap">&#8592; Back</button>
+      </div>
+      <h1 id="wifiMapTitle"></h1>
+      <p class="subtitle" id="wifiMapSubtitle"></p>
+      <div id="wifiMap"></div>
+    </div>
+
   </section>
 
   <section id="tab-bt" class="tab">
@@ -432,8 +500,11 @@
   let currentBssidForDetail = null;
 
   window.__backHandler = function () {
-    if (wifiSubView === "detail") { showWifiView("networks"); return true; }
-    if (wifiSubView === "networks") { showWifiView("root"); return true; }
+    if (typeof wifiStack !== "undefined" && wifiStack.length > 1) {
+      wifiStack.pop();
+      renderWifiView();
+      return true;
+    }
     const active = document.querySelector(".tabbar button.active");
     if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
     return false;
@@ -493,6 +564,7 @@
   /* ============ WI-FI ============ */
   renderDL($("wifiInfo"), safeJSON(Android.getWifiInfo(), {}));
 
+  /* ---- signal bars helper ---- */
   function signalInfo(rssi) {
     const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
     const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
@@ -569,131 +641,198 @@
       $("wifiList").innerHTML = '<div class="empty">Scan error: ' + esc(msg) + '</div>';
   };
 
-  /* ---- View switching ---- */
-  const views = { root: $("wifiViewRoot"), networks: $("wifiViewNetworks"), detail: $("wifiViewDetail") };
-  function showWifiView(name) {
-    wifiSubView = name;
-    Object.entries(views).forEach(([k, el]) => el.style.display = (k === name ? "" : "none"));
+  /* ---------- WiFi navigation stack ---------- */
+  const wifiViews = {
+    root:    $("wifiViewRoot"),
+    history: $("wifiViewHistory"),
+    network: $("wifiViewNetwork"),
+    map:     $("wifiViewMap")
+  };
+  let wifiStack = ["root"];
+
+  function renderWifiView() {
+    const current = wifiStack[wifiStack.length - 1];
+    Object.entries(wifiViews).forEach(([k, el]) => {
+      el.style.display = (k === current ? "" : "none");
+    });
     document.querySelector("main").scrollTop = 0;
-    if (name === "networks") renderNetworksList();
+    if (current === "history") renderWifiHistoryList();
+    if (current === "map" && wifiMapInstance) {
+      setTimeout(() => wifiMapInstance.invalidateSize(), 80);
+    }
   }
 
-  $("btnWifiNetworks").addEventListener("click", () => showWifiView("networks"));
-  $("wifiBackToRoot").addEventListener("click", () => showWifiView("root"));
-  $("wifiBackToNetworks").addEventListener("click", () => showWifiView("networks"));
+  function pushWifiView(name) { wifiStack.push(name); renderWifiView(); }
+  function popWifiView()  { if (wifiStack.length > 1) { wifiStack.pop(); renderWifiView(); } }
 
-  /* ---- Networks list ---- */
-  function renderNetworksList() {
+  $("btnOpenWifiHistory").addEventListener("click", () => pushWifiView("history"));
+  $("wifiBackRoot").addEventListener("click", () => popWifiView());
+  $("wifiBackHistory").addEventListener("click", () => popWifiView());
+  $("wifiBackMap").addEventListener("click", () => popWifiView());
+
+  /* Reset stack when leaving the WiFi tab */
+  tabs.forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.tab !== "wifi" && wifiStack.length > 1) {
+      wifiStack = ["root"];
+      renderWifiView();
+    }
+  }));
+
+  /* ---------- History list (unique WiFi names only) ---------- */
+  function renderWifiHistoryList() {
     const list = safeJSON(Android.getWifiNetworkList(), []);
     list.sort((a, b) => b.lastSeen - a.lastSeen);
-    $("wifiNetworksSummary").textContent =
-      list.length + " unique network" + (list.length === 1 ? "" : "s") + " in history";
+    $("wifiHistorySummary").textContent =
+      list.length + " unique network" + (list.length === 1 ? "" : "s") +
+      " · sorted by most recent";
 
     if (!list.length) {
-      $("wifiNetworksList").innerHTML = '<div class="empty">No history yet. Run a scan or connect to Wi-Fi.</div>';
+      $("wifiHistoryList").innerHTML =
+        '<div class="empty">No history yet. Run a scan or connect to Wi-Fi.</div>';
       return;
     }
 
-    $("wifiNetworksList").innerHTML = list.map(n => {
-      const ssid = n.ssid || "(hidden)";
+    $("wifiHistoryList").innerHTML = list.map(n => {
+      const ssid = (n.ssid && n.ssid !== "") ? n.ssid : "(hidden)";
       return '<div class="net-card" data-bssid="' + esc(n.bssid) + '">' +
         '<div class="left">' +
           '<div class="net-ssid">' + esc(ssid) + '</div>' +
           '<div class="net-sub">' + esc(n.bssid) + '</div>' +
-          '<div class="net-counts">' +
-            '<span>Seen <strong>' + n.sightings + '</strong>×</span>' +
-            '<span>Connected <strong>' + n.connections + '</strong>×</span>' +
-            '<span>' + esc(fmtDate(n.lastSeen)) + '</span>' +
-          '</div>' +
         '</div>' +
-        '<div class="chev">›</div>' +
+        '<div class="chev">&#8250;</div>' +
       '</div>';
     }).join("");
 
-    $("wifiNetworksList").querySelectorAll(".net-card").forEach(card => {
-      card.addEventListener("click", () => openNetworkDetail(card.dataset.bssid));
+    $("wifiHistoryList").querySelectorAll(".net-card").forEach(card => {
+      card.addEventListener("click", () => openWifiNetwork(card.dataset.bssid));
     });
   }
 
-  $("btnClearWifiNetworks").addEventListener("click", () => {
+  $("btnClearWifiHistory").addEventListener("click", () => {
     if (!confirm("Clear all Wi-Fi history? This cannot be undone.")) return;
     Android.clearWifiNetworks();
-    renderNetworksList();
+    renderWifiHistoryList();
   });
 
-  /* ---- Network detail ---- */
-  function openNetworkDetail(bssid) {
+  /* ---------- Network detail ---------- */
+  let currentWifiNetwork = null;
+
+  function openWifiNetwork(bssid) {
     const detail = safeJSON(Android.getWifiNetworkDetail(bssid), null);
     if (!detail) { alert("Network not found."); return; }
-    currentBssidForDetail = bssid;
-    showWifiView("detail");
-    renderNetworkDetail(detail);
+    currentWifiNetwork = detail;
+    renderWifiNetworkDetail(detail);
+    pushWifiView("network");
   }
 
-  function renderNetworkDetail(d) {
-    const ssid = d.ssid || "(hidden)";
-    $("wifiDetailTitle").textContent = ssid;
-    $("wifiDetailSubtitle").textContent = d.bssid || "";
+  function renderWifiNetworkDetail(d) {
+    const ssid = (d.ssid && d.ssid !== "") ? d.ssid : "(hidden)";
+    $("wifiNetTitle").textContent = ssid;
+    $("wifiNetSubtitle").textContent = d.bssid || "";
 
-    const sightings = d.sightings || [];
+    const sightings   = d.sightings   || [];
     const connections = d.connections || [];
 
-    renderDL($("wifiDetailInfo"), {
-      "SSID":        ssid,
-      "BSSID":       d.bssid || "—",
-      "First seen":  fmtDate(d.firstSeen),
-      "Last seen":   fmtDate(d.lastSeen),
-      "Sightings":   sightings.length,
-      "Connections": connections.length
+    renderDL($("wifiNetCounts"), {
+      "Times found":     sightings.length,
+      "Times connected": connections.length,
+      "First seen":      fmtDate(d.firstSeen),
+      "Last seen":       fmtDate(d.lastSeen)
     });
 
-    /* Connections */
-    $("wifiDetailConnCount").textContent = connections.length ? "(" + connections.length + ")" : "";
-    if (!connections.length) {
-      $("wifiDetailConnections").innerHTML = '<div class="empty">Never connected from this device.</div>';
-    } else {
-      const sorted = connections.slice().reverse();
-      $("wifiDetailConnections").innerHTML = sorted.map(c => {
-        const t = fmtDate(c[0]);
-        let where = "location unavailable";
-        if (typeof c[1] === "number" && typeof c[2] === "number") {
-          where = '<a href="#" data-lat="' + c[1] + '" data-lon="' + c[2] + '">' +
-                  c[1].toFixed(5) + ", " + c[2].toFixed(5) + '</a>';
-        }
-        return '<div class="hist-item">🔗 ' + esc(t) + ' · ' + where + '</div>';
-      }).join("");
-    }
+    /* Reset toggle */
+    $("wifiNetSightings").style.display = "none";
+    $("btnToggleSightings").textContent = "Show all scan times ▾";
 
-    /* Sightings */
-    $("wifiDetailSigCount").textContent = sightings.length ? "(" + sightings.length + ")" : "";
-    if (!sightings.length) {
-      $("wifiDetailSightings").innerHTML = '<div class="empty">No sightings recorded.</div>';
-    } else {
-      const sorted = sightings.slice().reverse();
-      const show = sorted.slice(0, 300); // display cap for perf; storage is unlimited
-      $("wifiDetailSightings").innerHTML = show.map(s => {
-        const t = fmtDate(s[0]);
-        const sig = signalInfo(s[4] || -100);
-        let where = "location unavailable";
+    $("btnToggleSightings").onclick = () => {
+      const visible = $("wifiNetSightings").style.display !== "none";
+      if (visible) {
+        $("wifiNetSightings").style.display = "none";
+        $("btnToggleSightings").textContent = "Show all scan times ▾";
+      } else {
+        renderSightingsList(sightings);
+        $("wifiNetSightings").style.display = "";
+        $("btnToggleSightings").textContent = "Hide scan times ▴";
+      }
+    };
+
+    $("btnShowLatestMap").onclick = () => {
+      for (let i = sightings.length - 1; i >= 0; i--) {
+        const s = sightings[i];
         if (typeof s[1] === "number" && typeof s[2] === "number") {
-          where = '<a href="#" data-lat="' + s[1] + '" data-lon="' + s[2] + '">' +
-                  s[1].toFixed(5) + ", " + s[2].toFixed(5) + '</a>';
+          showWifiMap(s[1], s[2], ssid, fmtDate(s[0]));
+          return;
         }
-        return '<div class="hist-item">' +
-          sig.svg + esc(t) + ' · ' + esc(s[4] || 0) + ' dBm (' + sig.pct + '%) · ' + where +
-        '</div>';
-      }).join("") + (sorted.length > 300
-        ? '<div class="empty">Showing latest 300 of ' + sorted.length + ' sightings.</div>'
-        : "");
-    }
+      }
+      alert("No location recorded for this network.");
+    };
+  }
 
-    /* Wire map links */
-    document.querySelectorAll("#wifiDetailConnections a, #wifiDetailSightings a").forEach(a => {
-      a.addEventListener("click", e => {
-        e.preventDefault();
-        openExternal("https://www.google.com/maps?q=" + a.dataset.lat + "," + a.dataset.lon);
+  function renderSightingsList(sightings) {
+    const sorted = sightings.slice().reverse();
+    if (!sorted.length) {
+      $("wifiNetSightings").innerHTML = '<div class="empty">No sightings recorded.</div>';
+      return;
+    }
+    $("wifiNetSightings").innerHTML = sorted.map(s => {
+      const t     = fmtDate(s[0]);
+      const hasLoc = typeof s[1] === "number" && typeof s[2] === "number";
+      const sig   = signalInfo(s[4] || -100);
+      const lvl   = s[4] || 0;
+      const mapBtn = hasLoc
+        ? '<button class="mini-btn" data-lat="' + s[1] + '" data-lon="' + s[2] +
+          '" data-time="' + esc(t) + '">&#128205; Map</button>'
+        : '<span class="mini-muted">no location</span>';
+      return '<div class="sighting-row">' +
+        '<div class="sighting-info">' +
+          '<div class="sighting-time">' + esc(t) + '</div>' +
+          '<div class="sighting-sig">' + sig.svg + ' ' + lvl + ' dBm (' + sig.pct + '%)</div>' +
+        '</div>' +
+        mapBtn +
+      '</div>';
+    }).join("");
+
+    $("wifiNetSightings").querySelectorAll(".mini-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const lat = parseFloat(btn.dataset.lat);
+        const lon = parseFloat(btn.dataset.lon);
+        const name = currentWifiNetwork
+          ? ((currentWifiNetwork.ssid && currentWifiNetwork.ssid !== "")
+              ? currentWifiNetwork.ssid : "(hidden)")
+          : "";
+        showWifiMap(lat, lon, name, btn.dataset.time);
       });
     });
+  }
+
+  /* ---------- In-app Leaflet map for a WiFi pin ---------- */
+  let wifiMapInstance = null;
+  let wifiMapMarker = null;
+
+  function initWifiMap() {
+    if (wifiMapInstance) return;
+    if (typeof L === "undefined") { setTimeout(initWifiMap, 150); return; }
+    wifiMapInstance = L.map("wifiMap", { zoomControl: true }).setView([0, 0], 2);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(wifiMapInstance);
+  }
+
+  function showWifiMap(lat, lon, name, time) {
+    $("wifiMapTitle").textContent = name;
+    $("wifiMapSubtitle").textContent = "Detected at " + time;
+    pushWifiView("map");
+    setTimeout(() => {
+      initWifiMap();
+      setTimeout(() => {
+        if (!wifiMapInstance) return;
+        wifiMapInstance.invalidateSize();
+        if (wifiMapMarker) wifiMapInstance.removeLayer(wifiMapMarker);
+        wifiMapMarker = L.marker([lat, lon]).addTo(wifiMapInstance)
+          .bindPopup("<b>" + esc(name) + "</b><br>" + esc(time))
+          .openPopup();
+        wifiMapInstance.setView([lat, lon], 17);
+      }, 180);
+    }, 80);
   }
 
   /* ============ BLUETOOTH ============ */
