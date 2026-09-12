@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Native Data Probe</title>
+<style>
+  body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:20px; }
+  h1 { font-size:20px; color:#a8b2ff; }
+  h2 { font-size:14px; color:#7c8cff; border-bottom:1px solid #1f2430; padding-bottom:5px; margin-top:25px; }
+  dl { display:grid; grid-template-columns: 40% 1fr; gap:6px 14px; font-size:13px; }
+  dt { color:#8b93a5; }
+  dd { font-family: monospace; word-break: break-all; margin:0; }
+  pre { font-size:11px; max-height:200px; overflow:auto; background:#12151f; padding:10px; border-radius:8px; }
+</style>
+</head>
+<body>
+<h1>Native Android Data Probe</h1>
+
+<h2>Device & OS</h2>
+<dl id="device"></dl>
+
+<h2>Wi-Fi</h2>
+<dl id="wifi"></dl>
+<h3>Nearby Networks</h3>
+<pre id="wifiScan"></pre>
+
+<h2>Bluetooth</h2>
+<pre id="bluetooth"></pre>
+
+<h2>Location</h2>
+<dl id="location"></dl>
+
+<h2>Installed Apps (first 30)</h2>
+<pre id="apps"></pre>
+
+<h2>Accounts</h2>
+<pre id="accounts"></pre>
+
+<script>
+  const render = (id, data) => {
+    const el = document.getElementById(id);
+    if (!el || !data) return;
+    el.innerHTML = "";
+    for (const [k, v] of Object.entries(data)) {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = (v && typeof v === 'object') ? JSON.stringify(v) : v;
+      el.append(dt, dd);
+    }
+  };
+
+  render("device", JSON.parse(Android.getDeviceInfo()));
+  render("wifi", JSON.parse(Android.getWifiInfo()));
+
+  const wifiScan = JSON.parse(Android.getWifiScanResults());
+  document.getElementById("wifiScan").textContent = wifiScan.length
+    ? wifiScan.map(n => n.SSID + " (" + n.BSSID + ") | " + n.Level + "dBm").join("\n")
+    : "No scan results. Ensure location is on.";
+
+  const bt = JSON.parse(Android.getBluetoothBondedDevices());
+  document.getElementById("bluetooth").textContent = bt.length
+    ? bt.map(d => d.Name + " (" + d.Address + ")").join("\n")
+    : "No bonded devices.";
+
+  render("location", JSON.parse(Android.getLocation()));
+
+  const apps = JSON.parse(Android.getInstalledApps());
+  document.getElementById("apps").textContent = apps.slice(0, 30)
+    .map(a => a.Name + " (" + a.Package + ")").join("\n");
+
+  const accounts = JSON.parse(Android.getAccounts());
+  document.getElementById("accounts").textContent = accounts.length
+    ? accounts.map(a => a.Name + " [" + a.Type + "]").join("\n")
+    : "No accounts found.";
+</script>
+</body>
+</html>
