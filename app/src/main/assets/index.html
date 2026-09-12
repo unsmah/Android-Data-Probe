@@ -774,8 +774,9 @@
     }
     results.sort((a, b) => b.Level - a.Level);
     $("wifiList").innerHTML = results.map(wifiItemHTML).join("");
-    // Refresh stats cache after a scan (sightings were recorded)
-    loadNetworkStatsCache();
+    // Refresh stats cache after a scan (sightings + locations were recorded)
+    // Small delay so the Java-side write to disk has completed
+    setTimeout(loadNetworkStatsCache, 600);
   };
 
   window.onWifiScanError = msg => {
@@ -890,17 +891,33 @@
   /* ---------- Pin-all-on-map ---------- */
   $("btnPinAllOnMap").addEventListener("click", () => {
     const list = safeJSON(Android.getWifiNetworkList(), []);
-    const pins = list.filter(n =>
+
+    // Filter by current sub-tab
+    const filtered = historySubTab === "connected"
+      ? list.filter(n => n.connections > 0)
+      : list.filter(n => n.connections === 0);
+
+    // Only those with a location
+    const pins = filtered.filter(n =>
       typeof n.lastLat === "number" && typeof n.lastLon === "number");
+
     if (!pins.length) {
-      alert("No Wi-Fi has a recorded location yet. Turn on location and run a scan.");
+      alert("No networks in this tab have a recorded location yet.\n\n" +
+        "Turn on location services and run a scan first.");
       return;
     }
-    $("wifiMapTitle").textContent = "All Wi-Fi networks";
-    $("wifiMapSubtitle").textContent = pins.length + " network" +
-      (pins.length === 1 ? "" : "s") + " pinned at their latest detection";
+
+    // Count unique locations
+    const locSet = new Set(pins.map(p =>
+      p.lastLat.toFixed(4) + "," + p.lastLon.toFixed(4)));
+    const tabName = historySubTab === "connected" ? "Connected" : "Others";
+
+    $("wifiMapTitle").textContent = tabName + " — Wi-Fi map";
+    $("wifiMapSubtitle").textContent =
+      pins.length + " network" + (pins.length === 1 ? "" : "s") +
+      " at " + locSet.size + " location" + (locSet.size === 1 ? "" : "s");
+
     pushWifiView("map");
-    // Wait for the view to be visible, then init + render
     setTimeout(() => {
       initWifiMap();
       setTimeout(() => {
@@ -1087,25 +1104,65 @@
     if (!wifiMapInstance || !wifiMapLayer) return;
     wifiMapInstance.invalidateSize();
     wifiMapLayer.clearLayers();
-    const bounds = [];
+
+    // Group networks by rounded coordinates (4 decimals ≈ 11m precision)
+    // so networks sharing the same physical location become one pin.
+    const groups = new Map();
     pins.forEach(p => {
-      const lat = p.lastLat, lon = p.lastLon;
-      bounds.push([lat, lon]);
-      const marker = L.marker([lat, lon]).addTo(wifiMapLayer);
-      const connects = p.connections > 0
-        ? '<br><span style="color:#4ade80;">✓ connected ' + p.connections + '×</span>'
-        : '';
-      marker.bindPopup(
-        "<b>" + esc(p.ssid || "(hidden)") + "</b><br>" +
-        esc(p.bssid) + "<br>" +
-        (p.manufacturer ? esc(p.manufacturer) + "<br>" : "") +
-        "Sightings: " + p.sightings +
-        connects + "<br>" +
-        "Last seen: " + esc(fmtDate(p.lastSeen))
-      );
+      const key = p.lastLat.toFixed(4) + "," + p.lastLon.toFixed(4);
+      if (!groups.has(key)) {
+        groups.set(key, { lat: p.lastLat, lon: p.lastLon, nets: [] });
+      }
+      groups.get(key).nets.push(p);
     });
+
+    const bounds = [];
+
+    groups.forEach(g => {
+      bounds.push([g.lat, g.lon]);
+
+      let popup;
+      if (g.nets.length === 1) {
+        const p = g.nets[0];
+        popup =
+          "<div style='min-width:180px;'>" +
+          "<b>" + esc(p.ssid || "(hidden)") + "</b><br>" +
+          "<span style='font-family:monospace;font-size:11px;'>" + esc(p.bssid) + "</span><br>" +
+          (p.manufacturer ? esc(p.manufacturer) + "<br>" : "") +
+          "Sightings: " + p.sightings + "<br>" +
+          (p.connections > 0
+            ? "<span style='color:#4ade80;'>✓ connected " + p.connections + "×</span><br>"
+            : "") +
+          "Last seen: " + esc(fmtDate(p.lastSeen)) +
+          "</div>";
+      } else {
+        const rows = g.nets.map(p => {
+          const conn = p.connections > 0
+            ? " <span style='color:#4ade80;font-weight:bold;'>✓</span>" : "";
+          return "<div style='margin-bottom:8px;'>" +
+            "<b>" + esc(p.ssid || "(hidden)") + "</b>" + conn + "<br>" +
+            "<span style='font-family:monospace;font-size:10.5px;color:#999;'>" +
+            esc(p.bssid) + "</span>" +
+            (p.manufacturer
+              ? "<br><span style='font-size:10.5px;color:#888;'>" + esc(p.manufacturer) + "</span>"
+              : "") +
+            "</div>";
+        }).join("");
+        popup =
+          "<div style='min-width:220px;max-width:280px;'>" +
+          "<b>" + g.nets.length + " networks at this location</b>" +
+          "<hr style='border:none;border-top:1px solid #ddd;margin:8px 0;'>" +
+          rows +
+          "</div>";
+      }
+
+      const marker = L.marker([g.lat, g.lon]).addTo(wifiMapLayer);
+      marker.bindPopup(popup, { maxWidth: 320 });
+    });
+
     if (bounds.length === 1) {
       wifiMapInstance.setView(bounds[0], 16);
+      wifiMapLayer.eachLayer(l => l.openPopup && l.openPopup());
     } else if (bounds.length > 1) {
       wifiMapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
     }
