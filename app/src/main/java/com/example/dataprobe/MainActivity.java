@@ -677,9 +677,33 @@ public class MainActivity extends AppCompatActivity {
         public void loadAppsAsync(final String filter) {
             new Thread(() -> {
                 final String result = getInstalledAppsInternal(filter);
+                writeAppsCache(result);
                 webView.post(() -> webView.evaluateJavascript(
                     "window.onAppsLoaded(" + result + ")", null));
             }, "apps-loader").start();
+        }
+
+        @JavascriptInterface
+        public String getCachedApps() { return readAppsCache(); }
+
+        @JavascriptInterface
+        public void clearAppsCache() {
+            new Thread(() -> { try { appsCacheFile().delete(); } catch (Exception ignored) {} }).start();
+        }
+
+        private File appsCacheFile() { return new File(getFilesDir(), "apps_cache.json"); }
+
+        private void writeAppsCache(String json) {
+            try { Files.write(appsCacheFile().toPath(), json.getBytes(StandardCharsets.UTF_8)); }
+            catch (Exception ignored) {}
+        }
+
+        private String readAppsCache() {
+            try {
+                File f = appsCacheFile();
+                if (!f.exists()) return "[]";
+                return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            } catch (Exception e) { return "[]"; }
         }
 
         /** Synchronous version (kept for backwards compat, but not used by UI). */

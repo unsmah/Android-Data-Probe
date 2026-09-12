@@ -820,6 +820,24 @@
   }
 
   /* =========================================================
+     Load apps from cache on startup
+     ========================================================= */
+  (function loadAppsFromCache() {
+    try {
+      const cached = safeJSON(Android.getCachedApps(), []);
+      if (cached && cached.length) {
+        appsCache = cached;
+        $("btnLoadApps").textContent = "Reload apps";
+        $("appFilters").style.display = "";
+        document.querySelectorAll("#appFilters button").forEach(b => {
+          b.classList.toggle("btn-primary", b.dataset.filter === currentFilter);
+        });
+        renderApps(appsCache, currentFilter);
+      }
+    } catch (e) { console.warn("cache load failed:", e); }
+  })();
+
+  /* =========================================================
      Initial pull of permission state
      ========================================================= */
   refreshPermissionBanner();
