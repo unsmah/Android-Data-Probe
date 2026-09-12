@@ -56,17 +56,43 @@
   }
   h2:first-child { margin-top: 0; }
 
-  dl {
-    display: grid; grid-template-columns: 42% 1fr; gap: 8px 14px;
-    margin: 0; padding: 14px 16px;
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  .kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    table-layout: fixed;
     font-size: 13px;
   }
-  dt { color: var(--text-dim); }
-  dd { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
-       word-break: break-word; color: #d5dae8; white-space: pre-wrap; }
-  dd a { color: var(--accent); text-decoration: none; }
-  dd .err { color: var(--warn); }
+  .kv-table tr { border-bottom: 1px solid var(--border); }
+  .kv-table tr:last-child { border-bottom: none; }
+  .kv-table td {
+    padding: 11px 14px;
+    vertical-align: top;
+    text-align: left;
+  }
+  .kv-label {
+    color: var(--text-dim);
+    width: 42%;
+    overflow-wrap: anywhere;
+  }
+  .kv-value {
+    color: #d5dae8;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12.5px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .kv-value a { color: var(--accent); text-decoration: none; }
+  .kv-value.err { color: var(--warn); }
+  .kv-empty {
+    color: var(--text-faint); padding: 14px 16px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 13px;
+  }
 
   .btn {
     font: inherit; font-size: 13.5px; font-weight: 500;
@@ -107,9 +133,24 @@
   .item .meta { color: var(--text-dim); font-size: 11.5px;
                 font-family: ui-monospace, monospace; flex-shrink: 0; }
   .item .body {
-    padding: 10px 14px 14px; border-top: 1px solid var(--border);
-    font-size: 12px; font-family: ui-monospace, monospace;
-    color: #b8c1d4; white-space: pre-wrap; word-break: break-all; line-height: 1.6;
+    border-top: 1px solid var(--border);
+    background: transparent;
+    padding: 0;
+  }
+  .item .body .kv-table {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+  .item .body pre {
+    margin: 0;
+    padding: 12px 14px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 12px;
+    font-family: ui-monospace, Menlo, monospace;
+    color: #b8c1d4;
+    line-height: 1.6;
   }
 
   .net-card {
@@ -227,6 +268,44 @@
   }
   .mini-btn:active { background: #232a3a; }
   .mini-muted { color: var(--text-faint); font-size: 11px; font-style: italic; flex-shrink: 0; }
+
+  .oui-loader {
+    background: linear-gradient(180deg, #1a2540, #16203a);
+    border: 1px solid #2f4a7a; color: #cfe0ff;
+    padding: 12px 16px; border-radius: 12px; font-size: 13px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .oui-loader .spinner {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border: 2px solid rgba(124,140,255,0.3);
+    border-top-color: #7c8cff;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  .oui-loader.done {
+    background: linear-gradient(180deg, #142a1c, #102318);
+    border-color: #2f7a4a; color: #cfe0d4;
+  }
+
+  .more-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .more-wrap > summary {
+    list-style: none; cursor: pointer;
+    padding: 12px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .more-wrap > summary::-webkit-details-marker { display: none; }
+  .more-wrap[open] > summary { border-bottom: 1px solid var(--border); }
+  .more-wrap .kv-table {
+    border: none; border-radius: 0; background: transparent;
+  }
 </style>
 </head>
 <body>
@@ -245,15 +324,19 @@
   <section id="tab-home" class="tab active">
     <h1>Data Probe</h1>
     <p class="subtitle">Native Android information, gathered locally.</p>
+    <div class="oui-loader" id="ouiLoader" style="display:none;">
+      <span class="spinner"></span>
+      <span id="ouiLoaderText">Downloading router manufacturer database…</span>
+    </div>
     <h2>Device &amp; OS</h2>
-    <dl id="devInfo"></dl>
+    <div id="devInfo"></div>
   </section>
 
   <section id="tab-wifi" class="tab">
     <div id="wifiViewRoot">
       <h1>Wi-Fi</h1>
       <h2>Current connection</h2>
-      <dl id="wifiInfoPrimary"></dl>
+      <div id="wifiInfoPrimary"></div>
       <details class="item" id="wifiMoreToggle" style="margin-top:8px;">
         <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
         <div class="body" id="wifiInfoMore" style="padding:0;"></div>
@@ -291,7 +374,7 @@
       </div>
       <h1 id="wifiNetTitle"></h1>
       <p class="subtitle" id="wifiNetSubtitle"></p>
-      <dl id="wifiNetPrimary"></dl>
+      <div id="wifiNetPrimary"></div>
       <details class="item" style="margin-top:8px;">
         <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
         <div class="body" id="wifiNetMore" style="padding:0;"></div>
@@ -328,7 +411,7 @@
   <section id="tab-loc" class="tab">
     <h1>Location</h1>
     <h2>Last known fix</h2>
-    <dl id="locInfo"></dl>
+    <div id="locInfo"></div>
     <div class="btn-row">
       <button class="btn" id="btnOpenMaps">Open in Google Maps</button>
       <button class="btn btn-primary" id="btnLiveTrack">Start live tracking</button>
@@ -418,33 +501,54 @@
     el.innerHTML = "";
     if (!data || Object.keys(data).length === 0) {
       if (emptyMsg) {
-        const dd = document.createElement("dd");
-        dd.textContent = emptyMsg; dd.style.color = "#6b7488";
-        dd.style.gridColumn = "1 / -1"; el.appendChild(dd);
+        const div = document.createElement("div");
+        div.className = "kv-empty";
+        div.textContent = emptyMsg;
+        el.appendChild(div);
       }
       return;
     }
+    const table = document.createElement("table");
+    table.className = "kv-table";
     for (const [k, v] of Object.entries(data)) {
-      const dt = document.createElement("dt"); dt.textContent = k;
-      const dd = document.createElement("dd");
+      const tr = document.createElement("tr");
+      const tdL = document.createElement("td");
+      tdL.className = "kv-label";
+      tdL.textContent = k;
+      const tdV = document.createElement("td");
+      tdV.className = "kv-value";
       if (k === "MapsUrl" && typeof v === "string") {
         const a = document.createElement("a");
         a.href = v; a.textContent = "Open in Google Maps →";
         a.addEventListener("click", e => { e.preventDefault(); openExternal(v); });
-        dd.appendChild(a);
+        tdV.appendChild(a);
       } else {
-        dd.textContent = formatValue(v);
-        if (k === "error") dd.classList.add("err");
+        tdV.textContent = formatValue(v);
+        if (k === "error") tdV.classList.add("err");
       }
-      el.append(dt, dd);
+      tr.append(tdL, tdV);
+      table.appendChild(tr);
     }
+    el.appendChild(table);
   }
 
-  function itemHTML(name, meta, details) {
+  function itemHTML(name, meta, rowsOrText) {
+    let bodyHtml;
+    if (typeof rowsOrText === "string") {
+      bodyHtml = '<pre>' + esc(rowsOrText) + '</pre>';
+    } else {
+      let rows = '<table class="kv-table">';
+      for (const [k, v] of Object.entries(rowsOrText)) {
+        rows += '<tr><td class="kv-label">' + esc(k) + '</td>' +
+                '<td class="kv-value">' + esc(String(v)) + '</td></tr>';
+      }
+      rows += '</table>';
+      bodyHtml = rows;
+    }
     return '<details class="item">' +
       '<summary><span class="name">' + esc(name) + '</span>' +
       '<span class="meta">' + esc(meta) + '</span></summary>' +
-      '<div class="body">' + esc(details) + '</div></details>';
+      '<div class="body">' + bodyHtml + '</div></details>';
   }
 
   function deviceTypeLabel(t) {
@@ -617,22 +721,20 @@
                      ';font-weight:600;">' + sig.pct + '%</span>';
     const stats = (networkStatsCache && networkStatsCache[n.BSSID]) || {};
     const manuf = stats.manufacturer || (n.RouterManufacturer || "—");
-    const detail =
-      "SSID:                " + name + "\n" +
-      "BSSID:               " + n.BSSID + "\n" +
-      "Signal:              " + n.Level + " dBm (" + sig.pct + "%)\n" +
-      "Bars:                " + sig.bars + " / 4\n" +
-      "Frequency:           " + n.Frequency + " MHz (" + freqBand(n.Frequency) + ")\n" +
-      "Capabilities:        " + (n.Capabilities || "(open network)") + "\n" +
-      "Router manufacturer: " + manuf + "\n" +
-      "First seen:          " + (stats.firstSeen ? fmtDate(stats.firstSeen) : "—") + "\n" +
-      "Last seen:           " + (stats.lastSeen ? fmtDate(stats.lastSeen) : "—") + "\n" +
-      "Times found:         " + (stats.sightings != null ? stats.sightings : "—") + "\n" +
-      "Times connected:     " + (stats.connections != null ? stats.connections : "—");
-    return '<details class="item">' +
-      '<summary><span class="name">' + esc(name) + '</span>' +
-      '<span class="meta">' + metaHTML + '</span></summary>' +
-      '<div class="body">' + esc(detail) + '</div></details>';
+    const rows = {
+      "SSID":                name,
+      "BSSID":               n.BSSID,
+      "Signal":              n.Level + " dBm (" + sig.pct + "%)",
+      "Bars":                sig.bars + " / 4",
+      "Frequency":           n.Frequency + " MHz (" + freqBand(n.Frequency) + ")",
+      "Capabilities":        n.Capabilities || "(open network)",
+      "Router manufacturer": manuf,
+      "First seen":          stats.firstSeen ? fmtDate(stats.firstSeen) : "—",
+      "Last seen":           stats.lastSeen ? fmtDate(stats.lastSeen) : "—",
+      "Times found":         (stats.sightings != null ? stats.sightings : "—"),
+      "Times connected":     (stats.connections != null ? stats.connections : "—")
+    };
+    return itemHTML(name, metaHTML, rows);
   }
 
   let liveWifiScanning = false;
@@ -983,19 +1085,19 @@
     wifiMapInstance.invalidateSize();
     wifiMapLayer.clearLayers();
     const bounds = [];
-    const colors = ["#7c8cff", "#4ade80", "#f5c76e", "#f87171", "#c084fc",
-                    "#22d3ee", "#facc15", "#fb923c", "#a3e635", "#e879f9"];
-    pins.forEach((p, i) => {
-      const color = colors[i % colors.length];
+    pins.forEach(p => {
       const lat = p.lastLat, lon = p.lastLon;
       bounds.push([lat, lon]);
-      const circle = L.circleMarker([lat, lon], {
-        radius: 10, color, fillColor: color, fillOpacity: 0.85, weight: 3
-      }).addTo(wifiMapLayer);
-      circle.bindPopup(
+      const marker = L.marker([lat, lon]).addTo(wifiMapLayer);
+      const connects = p.connections > 0
+        ? '<br><span style="color:#4ade80;">✓ connected ' + p.connections + '×</span>'
+        : '';
+      marker.bindPopup(
         "<b>" + esc(p.ssid || "(hidden)") + "</b><br>" +
         esc(p.bssid) + "<br>" +
         (p.manufacturer ? esc(p.manufacturer) + "<br>" : "") +
+        "Sightings: " + p.sightings +
+        connects + "<br>" +
         "Last seen: " + esc(fmtDate(p.lastSeen))
       );
     });
@@ -1009,9 +1111,11 @@
   /* ============ BLUETOOTH ============ */
   function renderBonded(list) {
     $("btPaired").innerHTML = list.length
-      ? list.map(d => itemHTML(d.Name, d.Address,
-          "Address:  " + d.Address + "\nType:     " + deviceTypeLabel(d.Type) + "\nPaired:   yes"
-        )).join("")
+      ? list.map(d => itemHTML(d.Name, d.Address, {
+          "Address": d.Address,
+          "Type":    deviceTypeLabel(d.Type),
+          "Paired":  "yes"
+        })).join("")
       : '<div class="empty">No paired devices.</div>';
   }
   renderBonded(safeJSON(Android.getBluetoothBondedDevices(), []));
@@ -1029,10 +1133,14 @@
     if (btSeen.has(d.Address)) return;
     btSeen.add(d.Address);
     if (btSeen.size === 1) $("btList").innerHTML = "";
-    $("btList").insertAdjacentHTML("beforeend", itemHTML(d.Name, d.RSSI + "dBm",
-      "Name:     " + d.Name + "\nAddress:  " + d.Address + "\nRSSI:     " + d.RSSI + " dBm\n" +
-      "Type:     " + deviceTypeLabel(d.Type) + "\nPaired:   " + (d.Bonded ? "yes" : "no") +
-      "\nSource:   " + (d.Source === "ble" ? "BLE" : "Classic")));
+    $("btList").insertAdjacentHTML("beforeend", itemHTML(d.Name, d.RSSI + "dBm", {
+      "Name":    d.Name,
+      "Address": d.Address,
+      "RSSI":    d.RSSI + " dBm",
+      "Type":    deviceTypeLabel(d.Type),
+      "Paired":  d.Bonded ? "yes" : "no",
+      "Source":  d.Source === "ble" ? "BLE" : "Classic"
+    }));
   };
 
   window.onBluetoothScanComplete = () => {
@@ -1069,7 +1177,32 @@
     }
   };
   window.onLocationStateChanged = on => {
-    refreshPermissionBanner();
+  
+  /* ============ OUI loader ============ */
+  (function watchOui() {
+    if (typeof Android.isOuiReady !== "function") {
+      $("ouiLoader").style.display = "none";
+      return;
+    }
+    function check() {
+      try {
+        if (Android.isOuiReady()) {
+          const el = $("ouiLoader");
+          if (el && el.style.display !== "none") {
+            el.classList.add("done");
+            $("ouiLoaderText").textContent = "Router manufacturer database ready.";
+            setTimeout(() => { el.style.display = "none"; }, 2000);
+          }
+          return;
+        }
+      } catch (e) {}
+      $("ouiLoader").style.display = "flex";
+      setTimeout(check, 1500);
+    }
+    check();
+  })();
+
+  refreshPermissionBanner();
     window.onLocationUpdated(safeJSON(Android.getLocation(), {}));
   };
 

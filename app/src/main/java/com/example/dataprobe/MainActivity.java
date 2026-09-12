@@ -232,10 +232,21 @@ public class MainActivity extends AppCompatActivity {
                 String action = intent.getAction();
                 scanHandler.postDelayed(() -> {
                     pushPermissionStatus();
-                    if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)) pushWifiInfo();
                     if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) pushBondedDevices();
                     if (LocationManager.PROVIDERS_CHANGED_ACTION.equals(action)) pushLocation();
                 }, 500);
+
+                if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action)) {
+                    int state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, -1);
+                    pushWifiInfo();
+                    if (state == WifiManager.WIFI_STATE_ENABLED
+                            || state == WifiManager.WIFI_STATE_ENABLING) {
+                        // WiFi is on but not connected yet — retry a few times
+                        for (long d : new long[]{1500, 3000, 6000, 10000, 15000}) {
+                            scanHandler.postDelayed(() -> pushWifiInfo(), d);
+                        }
+                    }
+                }
             }
         };
         IntentFilter f = new IntentFilter();
@@ -253,7 +264,14 @@ public class MainActivity extends AppCompatActivity {
                     NetworkInfo ni = i.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
                     if (ni != null && ni.isConnected()) {
                         WifiInfo wi = wifiManager.getConnectionInfo();
-                        if (wi != null) recordConnection(wi);
+                        if (wi != null) {
+                            recordConnection(wi);
+                            // Push fresh info to the UI immediately
+                            pushWifiInfo();
+                            // And again shortly after — the SSID sometimes arrives late
+                            scanHandler.postDelayed(() -> pushWifiInfo(), 1500);
+                            scanHandler.postDelayed(() -> pushWifiInfo(), 4000);
+                        }
                     }
                 } catch (Exception ignored) {}
             }
@@ -751,7 +769,8 @@ public class MainActivity extends AppCompatActivity {
                     JSONArray c = e.optJSONArray("connections");
                     item.put("sightings", s != null ? s.length() : 0);
                     item.put("connections", c != null ? c.length() : 0);
-                    // Latest known location
+                    // Latest known location — first try sightings
+                    boolean gotLoc = false;
                     if (s != null) {
                         for (int i = s.length() - 1; i >= 0; i--) {
                             JSONArray pt = s.optJSONArray(i);
@@ -759,6 +778,19 @@ public class MainActivity extends AppCompatActivity {
                                 item.put("lastLat", pt.optDouble(1));
                                 item.put("lastLon", pt.optDouble(2));
                                 item.put("lastLevel", pt.optInt(4, 0));
+                                item.put("lastSeenAtLoc", pt.optLong(0));
+                                gotLoc = true;
+                                break;
+                            }
+                        }
+                    }
+                    // If no sighting had a location, fall back to last connection
+                    if (!gotLoc && c != null) {
+                        for (int i = c.length() - 1; i >= 0; i--) {
+                            JSONArray pt = c.optJSONArray(i);
+                            if (pt != null && pt.length() >= 3 && !pt.isNull(1) && !pt.isNull(2)) {
+                                item.put("lastLat", pt.optDouble(1));
+                                item.put("lastLon", pt.optDouble(2));
                                 item.put("lastSeenAtLoc", pt.optLong(0));
                                 break;
                             }
