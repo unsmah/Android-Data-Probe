@@ -49,12 +49,16 @@ import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.Task;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -65,6 +69,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -88,164 +93,20 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, JSONObject> btSeen = new HashMap<>();
     private final Handler scanHandler = new Handler(Looper.getMainLooper());
 
+    /* OUI cache: prefix (no colons, uppercase) -> manufacturer */
+    private final ConcurrentHashMap<String, String> ouiMap = new ConcurrentHashMap<>();
+    private volatile boolean ouiReady = false;
+
     private static final int PERM_REQ = 1001;
     private static final int BT_ENABLE_REQ = 1002;
     private static final int LOC_ENABLE_REQ = 1003;
     private static final String WIFI_NETWORKS_FILE = "wifi_networks.json";
     private static final String LOCATION_HISTORY_FILE = "location_history.json";
+    private static final String OUI_CACHE_FILE = "oui_cache.txt";
+    private static final String OUI_URL = "https://raw.githubusercontent.com/Ringmast4r/OUI-Master-Database/master/LISTS/kismet_manuf.txt";
     private static final int LOCATION_HISTORY_MAX = 500;
     private static final int LIVE_SCAN_INTERVAL_MS = 35000;
     private static final long CONNECTION_DEBOUNCE_MS = 5 * 60 * 1000L;
-
-    /* ------- OUI table: BSSID prefix → manufacturer ------- */
-    private static final Map<String, String> OUI = new HashMap<>();
-    static {
-        // TP-Link
-        String[] tplink = { "14CC20","30B5C2","50C7BF","60E327","98DAC4","A42BB0",
-            "AC84C6","B04E26","B0BE76","C025E9","C46E1F","C4E984","D807B6","E894F6",
-            "EC086B","EC888F","F42853","F8D111","FCECDA","10FEED","3460F9","480EEC",
-            "5C63BF","68FF7B","909A4A","9CA615","A0F3C1","B09575","BC4699","D46E0E",
-            "DC9FDB","E4C32A","F09FC2" };
-        for (String p : tplink) OUI.put(p, "TP-Link");
-        // Netgear
-        String[] netgear = { "204E7F","28C68E","2C3033","30469A","3C3786","4494FC",
-            "4C60DE","6CB0CE","841B5E","9C3DCF","A040A0","B03956","B07FB9","C03F0E",
-            "C43DC7","CC40D0","D43D7E","DCEF09","E0469A","E4F4C6","E8FCAF","F87394" };
-        for (String p : netgear) OUI.put(p, "Netgear");
-        // D-Link
-        String[] dlink = { "001B11","001E58","001F1F","002191","0022B0","002401",
-            "00265A","14D64D","1C7EE5","28107B","340804","3C1E04","409BCD","5CD998",
-            "74DA88","78542E","84C9B2","9094E4","9CD643","ACF1DF","B8A386","C412F5",
-            "C8BE19","CCB255","D8FEE3","E01CFC","EC2280","F07D68","F48E38","FC7516" };
-        for (String p : dlink) OUI.put(p, "D-Link");
-        // Asus
-        String[] asus = { "000C6E","000EA6","00112F","0013D4","0015F2","001731",
-            "04D4C4","08606E","10BF48","10C37B","14DAE9","14DDA9","1C872C","20CF30",
-            "2C56DC","2CFDA1","305A3A","38D547","3C970E","40167E","4439C4","485B39",
-            "4CEDFB","50465D","5404A6","54A050","6045CB","60A44C","6C7220","704D7B",
-            "74D02B","7824AF","7C10C9","88D7F6","9C5C8E","A45E60","AC220B","AC9E17",
-            "B06EBF","B8AEED","BCAEC5","BCEE7B","C86000","CC2DE0","D017C2","D4CA6D",
-            "D850E6","DC56E7","E03F49","E0CB4E","E470B8","E89C25","F46D04","F832E4" };
-        for (String p : asus) OUI.put(p, "ASUS");
-        // Huawei
-        String[] huawei = { "001882","001E10","0022A1","002568","0034FE","00464B",
-            "005A13","00664B","00E0FC","0425C5","043389","047503","049645","04BD70",
-            "04C06F","04F938","08 19A6".replace(" ",""),"086361","087A4C","0C37DC","0C45BA",
-            "0C96BF","104780","105172","10AF78","143004","145F94","14B968","18C58A",
-            "1C151F","1C1D67","1C8E5C","200BC7","202BC1","20F3A3","240995","246968",
-            "24DBAC","283CE4","285FDB","286ED4","28B448","2C55D3","2CAB00","308730",
-            "30D17E","3400A3","3429EA","346BD4","34A84E","38F889","3CCD57","3CDFBD",
-            "404D8E","40CBA8","446A2E","44C346","480031","483C0C","48437C","486276",
-            "4C1FCC","4C5499","4C8BEF","4CB16C","5001D9","509F27","5425EA","5439DF",
-            "548998","54A51B","581F28","582AF7","5C4CA9","5C7D5E","5CB395","60DE44",
-            "643E8C","64A651","688F84","68A0F6","6C92CF","7054F5","70723C","707BE8",
-            "74882A","781DBA","786A89","7C11CB","7C6097","7CA177","80B686","80FB06",
-            "845B12","84A8E4","8828B3","883FD3","8853D4","88E3AB","8C0D76","8C34FD",
-            "8CE117","9017AC","904E2B","90671C","94049C","940E6B","98E7F5","9C28EF",
-            "9C741A","9CA2F4","A08CF8","A47174","A4C64F","A8C83A","AC4E91","AC853D",
-            "ACE215","B05B67","B08991","B41513","B4CD27","B808D7","BC25E0","BC7670",
-            "C07009","C40528","C4072F","C80CC8","C894BB","C8D15E","CC53B5","CCA223",
-            "D02DB3","D07AB5","D46AA8","D494E8","D8490B","DCD2FC","E0247F","E09796",
-            "E468A3","E4C2D1","E8088B","E8BDD1","EC233D","EC388F","ECCB30","F04347",
-            "F4559C","F48E92","F49FF3","F80113","F83DFF","F84ABF","F8E811","FC48EF" };
-        for (String p : huawei) OUI.put(p, "Huawei");
-        // ZTE
-        String[] zte = { "0015EB","0019C6","001E73","00219E","002293","002512",
-            "0026ED","045A95","04C1B9","08181A","0C1262","0C3796","0C8910","105CBF",
-            "1460CB","14A364","18C501","1C6423","206BE7","20C6EB","244C07","2C26C5",
-            "2C9D1E","3059B7","30F31D","344B50","34E0CF","3822F4","382B78","3891FB",
-            "3C1CBE","3C26E4","3CCD5D","404D8E","407C7D","442C05","4452DB","446A2E",
-            "48282F","485702","4C09B4","4C16F1","4C8120","508F4C","50C8E5","5422F8",
-            "54BEF7","584BBC","5C93A2","5CB395","5CC307","608A10","60C798","64136C",
-            "64317E","681AB2","6C8B2F","702E22","703ACB","742F68","74888A","781DBA",
-            "7831C1","788B2A","7C2F80","7CBFB1","80EA96","84742A","849DC5","88329B",
-            "88E3AB","8C6878","8CDCD4","901B0E","90C7D8","9439E5","982CBE","986CF5",
-            "9C6F52","A0EC80","A47B9D","A84E3F","AC6462","ACDBDA","B075D5","B40F3B",
-            "B44CC4","B4B362","B84D43","BC1485","BC4486","C0028D","C44F33","C83A6B",
-            "C87B5B","CC1AFA","CC7B35","D0154A","D016B4","D05BA8","D404CD","D46A91",
-            "D855A3","D8C7C8","DC028E","DC7144","E0C3F3","E45D75","E81324","E892A4",
-            "EC1D7F","EC8AC7","ECED04","F05A09","F46A92","F4B8A7","F88E85","FC2D5E",
-            "FCC897" };
-        for (String p : zte) OUI.put(p, "ZTE");
-        // Tenda
-        String[] tenda = { "00B00C","08107 8".replace(" ",""),"08BEAC","0C8063","10327E",
-            "10FEED","14EBB6","18A6F7","1C1B0D","207693","2469A5","2887BA","2C16BD",
-            "2C3AFD","340AFF","349672","38B725","3C46D8","40169F","4432C8","487B6B",
-            "4C09B4","502B73","50642B","54AF97","58D9D5","5CF938","6032B1","646E97",
-            "68DDD9","6C5940","6C7220","703ACB","746A89","78A5DD","7C8BCA","80EA07",
-            "8416F9","882593","88571D","8C882B","909A4A","94698F","98038C","9C50EE",
-            "A09D22","A42BB0","A811FC","AC5F3E","B0487A","B40F3B","B83A5A","BC325F",
-            "C03D03","C4E984","C83A35","CC2D1B","D076E7","D46E0E","D83214","DC028E",
-            "E01C41","E46F13","E865D4","EC172F","F09FC2","F42853","F81A67","FC7C02" };
-        for (String p : tenda) OUI.put(p, "Tenda");
-        // Linksys
-        String[] linksys = { "000393","00045A","000C41","000F66","001217","001310",
-            "0014BF","001839","0018F8","001A70","001C10","001D7E","001EE5","001F33",
-            "002129","00226B","002369","0024B2","00259C","00265A","20AA4B","288F5D",
-            "2C600C","308CFB","48F8B3","4C5E0C","586D8F","6038E0","687F74","7C69F6",
-            "841B5E","8C5A0C","94103E","98FC11","A4DB30","AC220B","B4750E","C05627",
-            "C4411E","C8BE19","C8D719","D4A02E","E42892","E89F80","EC1A59","F81EDF",
-            "FCECDA" };
-        for (String p : linksys) OUI.put(p, "Linksys");
-        // Cisco
-        String[] cisco = { "00000C","000142","000143","000163","000164","000196",
-            "000197","0001C7","0001C9","000216","000217","00023D","00024A","00024B",
-            "00027D","00027E","0002B9","0002BA","0002FC","0002FD","000331","000332",
-            "00036B","00036C","00039F","0003A0","0003E3","0003E4","0003FD","0003FE",
-            "000427","000428","00046D","00046E","00049A","00049B","0004C0","0004C1",
-            "0004DD","0004DE","000500","000501","000531","000532","00055E","00055F",
-            "000573","000574","00059A","00059B","0005DC","0005DD","000628","00062A",
-            "000652","000653","00067C","0006C1","0006D6","0006D7","0006F6","00070D",
-            "00070E","000731","000732","00077D","00077E","000784","000785","0007B3",
-            "0007B4","0007EB","0007EC","000820","000821","00082F","000830","00087B",
-            "00087C","0008A3","0008A4","0008E2","0008E3","000911","000912","000943",
-            "000944","00095B","00095C","00097B","00097C","0009B6","0009B7","0009E8",
-            "0009E9","000A41","000A42","000A8A","000A8B","000AB7","000AB8","000AF3",
-            "000AF4","000B45","000B46","000B5F","000B60","000B85","000BBE","000BBF",
-            "000BFC","000BFD","000C30","000C31","000C41","000C85","000C86","000CCE",
-            "000CCF","000D28","000D29","000D65","000D66","000DBC","000DBD","000DEC",
-            "000DED","000E38","000E39","000E83","000E84","000ED6","000ED7","000F23",
-            "000F24","000F34","000F35","000F8F","000F90","000FF7","000FF8" };
-        for (String p : cisco) OUI.put(p, "Cisco");
-        // Xiaomi
-        String[] xiaomi = { "0C1DAF","102AB3","185936","2082C0","28E31F","34CE00",
-            "3C47 11".replace(" ",""),"44650D","4CFB45","50EC50","584498","640980",
-            "64B473","68DFDD","742344","7802F8","7C1DD9","8CBEBE","9C99A0","A4C138",
-            "AC C1EE".replace(" ",""),"B0E235","C46AB7","D4970B","F0B429","F48B32",
-            "F8A45F","FC64BA","78 11DC".replace(" ",""),"74 23 44".replace(" ","") };
-        for (String p : xiaomi) OUI.put(p, "Xiaomi");
-        // Belkin
-        String[] belkin = { "001CDF","001E C3".replace(" ",""),"002275","0024 07".replace(" ",""),
-            "08006F","08863B","14 91 82".replace(" ",""),"1C 1A C0".replace(" ",""),
-            "24 F5 AA".replace(" ",""),"30 23 03".replace(" ",""),"44 E9 DD".replace(" ",""),
-            "58 EF 68".replace(" ",""),"60 38 E0".replace(" ",""),"64 51 06".replace(" ",""),
-            "74 1E 93".replace(" ",""),"84 1B 5E".replace(" ",""),"94 10 3E".replace(" ",""),
-            "98 FC 11".replace(" ",""),"B4 75 0E".replace(" ",""),"C0 56 27".replace(" ",""),
-            "EC 1A 59".replace(" ",""),"F8 1E DF".replace(" ","") };
-        for (String p : belkin) OUI.put(p, "Belkin");
-        // Arris
-        String[] arris = { "00 15 96".replace(" ",""),"00 1A 66".replace(" ",""),
-            "00 1A C4".replace(" ",""),"00 1B 52".replace(" ",""),
-            "00 1D CF".replace(" ",""),"00 1E 46".replace(" ",""),
-            "00 22 3A".replace(" ",""),"00 24 36".replace(" ",""),
-            "00 26 36".replace(" ",""),"10 05 CA".replace(" ",""),
-            "20 3D 66".replace(" ",""),"3C 7A 8A".replace(" ",""),
-            "44 E9 DD".replace(" ",""),"5C 57 1A".replace(" ",""),
-            "6C 5A B0".replace(" ",""),"78 71 D4".replace(" ",""),
-            "84 61 A0".replace(" ",""),"94 87 7C".replace(" ",""),
-            "A0 11 5B".replace(" ",""),"AC 87 A3".replace(" ",""),
-            "B0 7F B9".replace(" ",""),"C0 05 C2".replace(" ",""),
-            "C4 48 38".replace(" ",""),"D4 05 98".replace(" ",""),
-            "E8 3E FC".replace(" ",""),"F8 ED A5".replace(" ","") };
-        for (String p : arris) OUI.put(p, "ARRIS");
-    }
-
-    private String lookupManufacturer(String bssid) {
-        if (bssid == null || bssid.length() < 8) return "Unknown";
-        String prefix = bssid.substring(0, 8).replace(":", "").toUpperCase();
-        String m = OUI.get(prefix);
-        return m != null ? m : "Unknown (" + bssid.substring(0, 8) + ")";
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -287,9 +148,79 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
 
+        ensureOuiDatabase();
         registerStateReceiver();
         registerWifiConnectionReceiver();
         requestRuntimePermissions();
+    }
+
+    /* ================= OUI database ================= */
+
+    private File ouiCacheFile() { return new File(getFilesDir(), OUI_CACHE_FILE); }
+
+    private void ensureOuiDatabase() {
+        File f = ouiCacheFile();
+        if (f.exists() && f.length() > 50000) {
+            new Thread(() -> loadOuiCache(f), "oui-loader").start();
+            return;
+        }
+        new Thread(() -> {
+            try {
+                URL url = new URL(OUI_URL);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(60000);
+                conn.setRequestProperty("User-Agent", "DataProbe/1.0");
+                conn.connect();
+                if (conn.getResponseCode() == 200) {
+                    StringBuilder sb = new StringBuilder();
+                    BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        // kismet format: AABBCC<TAB>Manufacturer
+                        int tab = line.indexOf('\t');
+                        if (tab <= 0) continue;
+                        String prefix = line.substring(0, tab).replace(":", "").toUpperCase();
+                        String name = line.substring(tab + 1).trim();
+                        if (prefix.length() >= 6 && !name.isEmpty()) {
+                            sb.append(prefix).append('\t').append(name).append('\n');
+                        }
+                    }
+                    reader.close();
+                    Files.write(f.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+                    loadOuiCache(f);
+                }
+            } catch (Exception e) {
+                // Fall back silently to built-in table
+            }
+        }, "oui-downloader").start();
+    }
+
+    private void loadOuiCache(File f) {
+        try {
+            List<String> lines = Files.readAllLines(f.toPath(), StandardCharsets.UTF_8);
+            for (String line : lines) {
+                int tab = line.indexOf('\t');
+                if (tab > 0) {
+                    ouiMap.put(line.substring(0, tab), line.substring(tab + 1));
+                }
+            }
+            ouiReady = true;
+        } catch (Exception ignored) {}
+    }
+
+    private String lookupManufacturer(String bssid) {
+        if (bssid == null || bssid.length() < 8) return "Unknown";
+        String clean = bssid.replace(":", "").toUpperCase();
+        // Try 9-char (MA-S), 7-char (MA-M), 6-char (MA-L)
+        for (int len : new int[]{9, 7, 6}) {
+            if (clean.length() >= len) {
+                String m = ouiMap.get(clean.substring(0, len));
+                if (m != null && !m.isEmpty()) return m;
+            }
+        }
+        return "Unknown (" + bssid.substring(0, Math.min(8, bssid.length())) + ")";
     }
 
     /* ================= state receivers ================= */
@@ -544,12 +475,8 @@ public class MainActivity extends AppCompatActivity {
                 JSONArray pt = new JSONArray();
                 pt.put(now);
                 if (loc != null) {
-                    pt.put(loc.getLatitude());
-                    pt.put(loc.getLongitude());
-                    pt.put(loc.getAccuracy());
-                } else {
-                    pt.put(JSONObject.NULL); pt.put(JSONObject.NULL); pt.put(JSONObject.NULL);
-                }
+                    pt.put(loc.getLatitude()); pt.put(loc.getLongitude()); pt.put(loc.getAccuracy());
+                } else { pt.put(JSONObject.NULL); pt.put(JSONObject.NULL); pt.put(JSONObject.NULL); }
                 pt.put(level);
                 pt.put(freq);
                 sightings.put(pt);
@@ -607,20 +534,16 @@ public class MainActivity extends AppCompatActivity {
     /* ================= network interface enumeration ================= */
 
     private String getRealMacAddress() {
-        // First try WifiInfo
         try {
             WifiInfo wi = wifiManager.getConnectionInfo();
             String mac = wi.getMacAddress();
             if (mac != null && !mac.equals("02:00:00:00:00:00")) return mac;
         } catch (Exception ignored) {}
-
-        // Then try NetworkInterface enumeration (wlan0)
         try {
             Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
             while (ifaces.hasMoreElements()) {
                 NetworkInterface ni = ifaces.nextElement();
-                String name = ni.getName();
-                if (!name.startsWith("wlan")) continue;
+                if (!ni.getName().startsWith("wlan")) continue;
                 byte[] hw = ni.getHardwareAddress();
                 if (hw != null && hw.length == 6) {
                     StringBuilder sb = new StringBuilder();
@@ -633,8 +556,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         } catch (Exception ignored) {}
-
-        return null;  // genuinely masked by Android
+        return null;
     }
 
     private JSONObject getNetworkInterfaceInfo() {
@@ -650,7 +572,6 @@ public class MainActivity extends AppCompatActivity {
                 while (addrs.hasMoreElements()) {
                     InetAddress a = addrs.nextElement();
                     String hostAddr = a.getHostAddress();
-                    // strip %scope from IPv6 link-local
                     int pct = hostAddr.indexOf('%');
                     if (pct > 0) hostAddr = hostAddr.substring(0, pct);
                     if (a instanceof Inet4Address && !a.isLoopbackAddress()) {
@@ -699,6 +620,9 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
             return o.toString();
         }
+
+        @JavascriptInterface
+        public boolean isOuiReady() { return ouiReady; }
 
         @JavascriptInterface
         public String getPermissionStatus() {
@@ -753,9 +677,39 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 String bssid = info.getBSSID();
-                if (bssid != null) o.put("RouterManufacturer", lookupManufacturer(bssid));
+                if (bssid != null) {
+                    o.put("RouterManufacturer", lookupManufacturer(bssid));
+                    // Attach stats from history if available
+                    try {
+                        JSONObject idx = readWifiIndex();
+                        JSONObject e = idx.optJSONObject(bssid);
+                        if (e != null) {
+                            JSONArray s = e.optJSONArray("sightings");
+                            JSONArray c = e.optJSONArray("connections");
+                            if (s != null) {
+                                o.put("TimesFound", s.length());
+                                int best = -200, latest = 0, latestFreq = 0;
+                                for (int i = 0; i < s.length(); i++) {
+                                    JSONArray pt = s.optJSONArray(i);
+                                    if (pt == null) continue;
+                                    int lvl = pt.optInt(4, -200);
+                                    if (lvl > best) best = lvl;
+                                    if (i == s.length() - 1) {
+                                        latest = pt.optInt(4, 0);
+                                        latestFreq = pt.optInt(5, 0);
+                                    }
+                                }
+                                o.put("BestSignal", best > -200 ? best : "—");
+                                o.put("LatestSignal", latest);
+                                o.put("LatestFrequency", latestFreq);
+                            }
+                            if (c != null) o.put("TimesConnected", c.length());
+                            o.put("FirstSeen", e.optLong("firstSeen", 0));
+                            o.put("LastSeen", e.optLong("lastSeen", 0));
+                        }
+                    } catch (Exception ignored) {}
+                }
 
-                // IPv6 & other interface info
                 JSONObject ifs = getNetworkInterfaceInfo();
                 o.put("IPv4List", ifs.optJSONArray("ipv4"));
                 o.put("IPv6List", ifs.optJSONArray("ipv6"));
@@ -797,12 +751,11 @@ public class MainActivity extends AppCompatActivity {
                     JSONArray c = e.optJSONArray("connections");
                     item.put("sightings", s != null ? s.length() : 0);
                     item.put("connections", c != null ? c.length() : 0);
-                    // Include latest known location for map pinning
+                    // Latest known location
                     if (s != null) {
                         for (int i = s.length() - 1; i >= 0; i--) {
                             JSONArray pt = s.optJSONArray(i);
-                            if (pt != null && pt.length() >= 3
-                                    && !pt.isNull(1) && !pt.isNull(2)) {
+                            if (pt != null && pt.length() >= 3 && !pt.isNull(1) && !pt.isNull(2)) {
                                 item.put("lastLat", pt.optDouble(1));
                                 item.put("lastLon", pt.optDouble(2));
                                 item.put("lastLevel", pt.optInt(4, 0));
@@ -823,7 +776,6 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject index = readWifiIndex();
                 JSONObject e = index.optJSONObject(bssid);
                 if (e == null) return "null";
-                // Ensure manufacturer is present
                 if (!e.has("manufacturer"))
                     e.put("manufacturer", lookupManufacturer(bssid));
                 return e.toString();

@@ -64,7 +64,7 @@
   }
   dt { color: var(--text-dim); }
   dd { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
-       word-break: break-word; color: #d5dae8; }
+       word-break: break-word; color: #d5dae8; white-space: pre-wrap; }
   dd a { color: var(--accent); text-decoration: none; }
   dd .err { color: var(--warn); }
 
@@ -83,10 +83,7 @@
   .btn-danger { background: #2a1216; border-color: #5a1e24; color: #f08c8c; }
   .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 
-  .back-bar {
-    display: flex; align-items: center; gap: 8px;
-    margin: -8px 0 14px; padding: 0;
-  }
+  .back-bar { display: flex; align-items: center; gap: 8px; margin: -8px 0 14px; }
   .back-btn {
     background: none; border: none; color: var(--accent);
     font: inherit; font-size: 15px; font-weight: 500;
@@ -115,42 +112,24 @@
     color: #b8c1d4; white-space: pre-wrap; word-break: break-all; line-height: 1.6;
   }
 
-  /* Network cards in the history list — big tappable rows with chevron */
   .net-card {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 11px; padding: 13px 14px; margin-bottom: 8px;
+    border-radius: 11px; padding: 14px 16px; margin-bottom: 8px;
     cursor: pointer; display: flex; align-items: center; gap: 12px;
     transition: background .15s;
   }
   .net-card:active { background: var(--card2); }
   .net-card .left { flex: 1; min-width: 0; }
-  .net-card .net-ssid {
-    font-weight: 600; font-size: 14px; word-break: break-word;
-    margin-bottom: 3px;
-  }
-  .net-card .net-sub {
-    font-size: 11.5px; color: var(--text-dim);
-    font-family: ui-monospace, monospace;
-  }
-  .net-card .net-counts {
-    display: flex; gap: 12px; margin-top: 6px;
-    font-size: 11px; color: var(--text-faint);
-  }
-  .net-card .net-counts strong { color: var(--text-dim); font-weight: 600; }
-  .net-card .chev {
-    color: var(--text-faint); font-size: 20px; flex-shrink: 0;
-  }
+  .net-card .net-ssid { font-weight: 600; font-size: 15px; word-break: break-word; margin-bottom: 3px; }
+  .net-card .net-sub { font-size: 11.5px; color: var(--text-dim); font-family: ui-monospace, monospace; }
+  .net-card .chev { color: var(--text-faint); font-size: 22px; flex-shrink: 0; }
 
   .empty {
     color: var(--text-faint); font-size: 12.5px;
     padding: 14px; text-align: center;
-    background: var(--card); border: 1px dashed var(--border);
-    border-radius: 11px;
+    background: var(--card); border: 1px dashed var(--border); border-radius: 11px;
   }
-  .loading {
-    color: var(--text-dim); font-size: 13px;
-    padding: 20px; text-align: center;
-  }
+  .loading { color: var(--text-dim); font-size: 13px; padding: 20px; text-align: center; }
   .loading::before {
     content: ""; display: inline-block;
     width: 12px; height: 12px; margin-right: 8px;
@@ -164,8 +143,7 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
     gap: 14px 8px;
   }
-  .app-tile { display: flex; flex-direction: column; align-items: center;
-              gap: 6px; text-align: center; }
+  .app-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
   .app-tile img, .app-tile .fallback {
     width: 48px; height: 48px; border-radius: 12px;
     background: #1b202c; border: 1px solid #232a3a; object-fit: contain;
@@ -175,11 +153,11 @@
   .app-tile .label { font-size: 10.5px; line-height: 1.25; color: #c8cfe0;
                      word-break: break-word; max-width: 100%; }
 
-  #map { height: 280px; border-radius: 12px; overflow: hidden;
+  #map { height: 55vh; min-height: 320px; border-radius: 12px; overflow: hidden;
          background: var(--card); border: 1px solid var(--border); margin-top: 4px; }
   .leaflet-container { background: #12151f; }
 
-  #historyList, #wifiDetailSightings, #wifiDetailConnections {
+  #historyList, #wifiNetSightings {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 11px; overflow: hidden; margin-bottom: 10px;
   }
@@ -226,112 +204,29 @@
     background: var(--accent);
   }
 
-  /* ---- WiFi history cards ---- */
-  .net-card {
+  /* Sub-tabs (Connected / Others) */
+  .subtabs {
+    display: flex; gap: 0; margin: 0 0 14px;
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 11px; padding: 14px 16px; margin-bottom: 8px;
-    cursor: pointer; display: flex; align-items: center; gap: 12px;
-    transition: background .15s;
+    border-radius: 12px; overflow: hidden;
   }
-  .net-card:active { background: var(--card2); }
-  .net-card .left { flex: 1; min-width: 0; }
-  .net-card .net-ssid {
-    font-weight: 600; font-size: 15px; word-break: break-word;
-    margin-bottom: 3px;
+  .subtabs button {
+    flex: 1; padding: 11px 8px; background: none; border: none;
+    color: var(--text-dim); font: inherit; font-size: 13.5px;
+    font-weight: 500; cursor: pointer; transition: background .15s, color .15s;
   }
-  .net-card .net-sub {
-    font-size: 11.5px; color: var(--text-dim);
-    font-family: ui-monospace, monospace;
+  .subtabs button.active {
+    background: var(--card2); color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
-  .net-card .chev { color: var(--text-faint); font-size: 22px; flex-shrink: 0; }
 
-  /* ---- Sighting rows in detail ---- */
-  .sighting-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 11px 14px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; margin-bottom: 6px;
-    font-size: 12px;
-  }
-  .sighting-info { flex: 1; min-width: 0; }
-  .sighting-time {
-    color: var(--text-dim); font-family: ui-monospace, monospace;
-    font-size: 12px; margin-bottom: 3px;
-  }
-  .sighting-sig {
-    color: var(--text-dim); font-family: ui-monospace, monospace;
-    font-size: 11.5px; white-space: nowrap;
-  }
   .mini-btn {
     background: var(--card2); border: 1px solid var(--border-hi);
     color: var(--accent); padding: 6px 12px; border-radius: 8px;
-    font: inherit; font-size: 12px; cursor: pointer;
-    flex-shrink: 0;
+    font: inherit; font-size: 12px; cursor: pointer; flex-shrink: 0;
   }
   .mini-btn:active { background: #232a3a; }
-  .mini-muted {
-    color: var(--text-faint); font-size: 11px;
-    font-style: italic; flex-shrink: 0;
-  }
-
-  /* ---- WiFi in-app map ---- */
-  #wifiMap {
-    height: 380px; border-radius: 12px; overflow: hidden;
-    background: var(--card); border: 1px solid var(--border);
-    margin-top: 10px;
-  }
-
-
-  /* Fullscreen WiFi map (covers everything except tabbar) */
-  body.map-fullscreen main { padding: 0; }
-  body.map-fullscreen .perm-banner { display: none !important; }
-  #wifiViewMap.map-fullscreen {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
-    z-index: 50;
-    background: var(--bg);
-    padding: 0;
-  }
-  #wifiViewMap.map-fullscreen #wifiMap {
-    position: absolute; inset: 0;
-    height: 100%; width: 100%;
-    border-radius: 0; border: none; margin: 0;
-  }
-  #wifiViewMap.map-fullscreen .map-overlay {
-    position: absolute;
-    top: calc(12px + env(safe-area-inset-top, 0px));
-    left: 12px; right: 12px;
-    z-index: 500;
-    background: rgba(12,14,20,0.92);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    display: flex; align-items: center; gap: 12px;
-  }
-  #wifiViewMap.map-fullscreen .map-overlay .back-btn { padding: 0; margin: 0; }
-  #wifiViewMap.map-fullscreen .map-overlay .mtitle {
-    flex: 1; min-width: 0;
-  }
-  #wifiViewMap.map-fullscreen .map-overlay .mtitle .name {
-    font-size: 14px; font-weight: 600;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  #wifiViewMap.map-fullscreen .map-overlay .mtitle .sub {
-    font-size: 11.5px; color: var(--text-dim);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    margin-top: 2px;
-  }
-
-  .detail-kv {
-    display: grid; grid-template-columns: 42% 1fr; gap: 8px 14px;
-    margin: 0; padding: 14px 16px;
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    font-size: 13px;
-  }
-
+  .mini-muted { color: var(--text-faint); font-size: 11px; font-style: italic; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -347,7 +242,6 @@
 </div>
 
 <main>
-
   <section id="tab-home" class="tab active">
     <h1>Data Probe</h1>
     <p class="subtitle">Native Android information, gathered locally.</p>
@@ -355,14 +249,15 @@
     <dl id="devInfo"></dl>
   </section>
 
-  <!-- ================= WI-FI ================= -->
   <section id="tab-wifi" class="tab">
-
-    <!-- View: root -->
     <div id="wifiViewRoot">
       <h1>Wi-Fi</h1>
       <h2>Current connection</h2>
-      <dl id="wifiInfo"></dl>
+      <dl id="wifiInfoPrimary"></dl>
+      <details class="item" id="wifiMoreToggle" style="margin-top:8px;">
+        <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
+        <div class="body" id="wifiInfoMore" style="padding:0;"></div>
+      </details>
       <h2>Nearby networks</h2>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnScanWifi">Scan now</button>
@@ -373,13 +268,16 @@
       <button class="btn btn-primary" id="btnOpenWifiHistory" style="width:100%;">Show history</button>
     </div>
 
-    <!-- View: history list (unique WiFi names) -->
     <div id="wifiViewHistory" style="display:none;">
       <div class="back-bar">
         <button class="back-btn" id="wifiBackRoot">&#8592; Wi-Fi</button>
       </div>
       <h1>Wi-Fi history</h1>
       <p class="subtitle" id="wifiHistorySummary"></p>
+      <div class="subtabs" id="wifiHistoryTabs">
+        <button data-htab="connected">Connected</button>
+        <button data-htab="others" class="active">Others</button>
+      </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnPinAllOnMap" style="width:100%;">&#128506; Pin all on map</button>
       </div>
@@ -387,14 +285,17 @@
       <button class="btn btn-danger" id="btnClearWifiHistory" style="width:100%;">Clear all history</button>
     </div>
 
-    <!-- View: network detail -->
     <div id="wifiViewNetwork" style="display:none;">
       <div class="back-bar">
         <button class="back-btn" id="wifiBackHistory">&#8592; History</button>
       </div>
       <h1 id="wifiNetTitle"></h1>
       <p class="subtitle" id="wifiNetSubtitle"></p>
-      <dl id="wifiNetCounts"></dl>
+      <dl id="wifiNetPrimary"></dl>
+      <details class="item" style="margin-top:8px;">
+        <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
+        <div class="body" id="wifiNetMore" style="padding:0;"></div>
+      </details>
       <div class="btn-row" style="margin-top:14px;">
         <button class="btn btn-primary" id="btnShowLatestMap" style="width:100%;">&#128205; Show latest location on map</button>
       </div>
@@ -402,16 +303,14 @@
       <div id="wifiNetSightings" style="display:none; margin-top:10px;"></div>
     </div>
 
-    <!-- View: map -->
     <div id="wifiViewMap" style="display:none;">
-      <div id="wifiMapOverlayStatic" class="back-bar" style="padding:12px 16px 0;">
+      <div class="back-bar">
         <button class="back-btn" id="wifiBackMap">&#8592; Back</button>
       </div>
-      <h1 id="wifiMapTitle" style="padding:0 16px;"></h1>
-      <p class="subtitle" id="wifiMapSubtitle" style="padding:0 16px;"></p>
-      <div id="wifiMap" style="margin:10px 16px 0;"></div>
+      <h1 id="wifiMapTitle"></h1>
+      <p class="subtitle" id="wifiMapSubtitle"></p>
+      <div id="map"></div>
     </div>
-
   </section>
 
   <section id="tab-bt" class="tab">
@@ -436,7 +335,7 @@
       <button class="btn" id="btnRefreshMap">Refresh map</button>
     </div>
     <h2>Live map<span class="live" id="liveIndicator" style="display:none;">live</span></h2>
-    <div id="map"></div>
+    <div id="locMap"></div>
     <h2>History <span id="histCount" style="font-size:11px; color:var(--text-faint); font-weight:400; text-transform:none; letter-spacing:0;"></span></h2>
     <div id="historyList"></div>
     <button class="btn btn-danger" id="btnClearHistory">Clear history</button>
@@ -454,7 +353,6 @@
     </div>
     <div id="appsGrid"></div>
   </section>
-
 </main>
 
 <nav class="tabbar">
@@ -490,6 +388,32 @@
     ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   const safeJSON = (s, fb) => { try { return JSON.parse(s); } catch { return fb; } };
 
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    return new Date(ts).toLocaleString();
+  }
+
+  function formatValue(v) {
+    if (v === null || v === undefined) return "—";
+    if (Array.isArray(v)) {
+      if (!v.length) return "—";
+      return v.map(item => {
+        if (typeof item === "object" && item !== null) {
+          if (item.addr) {
+            let s = item.addr;
+            if (item.iface) s = item.iface + ": " + s;
+            if (item.scope) s += " (" + item.scope + ")";
+            return s;
+          }
+          return JSON.stringify(item);
+        }
+        return String(item);
+      }).join("\n");
+    }
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+
   function renderDL(el, data, emptyMsg) {
     el.innerHTML = "";
     if (!data || Object.keys(data).length === 0) {
@@ -509,7 +433,7 @@
         a.addEventListener("click", e => { e.preventDefault(); openExternal(v); });
         dd.appendChild(a);
       } else {
-        dd.textContent = (v && typeof v === "object") ? JSON.stringify(v) : v;
+        dd.textContent = formatValue(v);
         if (k === "error") dd.classList.add("err");
       }
       el.append(dt, dd);
@@ -531,10 +455,20 @@
   }
   function openExternal(url) { try { location.href = url; } catch (e) {} }
 
-  function fmtDate(ts) {
-    if (!ts) return "—";
-    const d = new Date(ts);
-    return d.toLocaleString();
+  function signalInfo(rssi) {
+    const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
+    const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+    const color = bars === 4 ? "#4ade80" : bars === 3 ? "#a3e635"
+                : bars === 2 ? "#f5c76e" : "#f87171";
+    let svg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
+    for (let i = 0; i < 4; i++) {
+      const h = 4 + i * 3;
+      svg += '<rect x="' + (i * 5) + '" y="' + (16 - h) +
+             '" width="3.5" height="' + h + '" rx="1" fill="' +
+             (i < bars ? color : '#2c3346') + '"/>';
+    }
+    svg += '</svg>';
+    return { svg, pct, color, bars };
   }
 
   /* ============ Tabs ============ */
@@ -545,24 +479,9 @@
     tabSections.forEach(s => s.classList.toggle("active", s.id === "tab-" + name));
     tabs.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
     document.querySelector("main").scrollTop = 0;
-    if (name === "loc") setTimeout(() => { if (map) map.invalidateSize(); }, 60);
+    if (name === "loc") setTimeout(() => { if (locMap) locMap.invalidateSize(); }, 60);
   }
   tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
-
-  /* ============ Back handler ============ */
-  let wifiSubView = "root";
-  let currentBssidForDetail = null;
-
-  window.__backHandler = function () {
-    if (typeof wifiStack !== "undefined" && wifiStack.length > 1) {
-      wifiStack.pop();
-      renderWifiView();
-      return true;
-    }
-    const active = document.querySelector(".tabbar button.active");
-    if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
-    return false;
-  };
 
   /* ============ Permission banner ============ */
   const permBanner = $("permBanner");
@@ -597,88 +516,119 @@
       st.bluetoothEnabled, st.wifiEnabled);
   }
 
-  /* ============ Update callbacks ============ */
-  window.onWifiInfoUpdated = info => renderDL($("wifiInfo"), info);
-  window.onBondedDevicesUpdated = list => renderBonded(list);
-  window.onLocationUpdated = loc => {
-    renderDL($("locInfo"), loc);
-    if (typeof loc.Latitude === "number") {
-      currentLat = loc.Latitude; currentLon = loc.Longitude;
-      $("btnOpenMaps").disabled = false;
-    }
-  };
-  window.onLocationStateChanged = on => {
-    refreshPermissionBanner();
-    window.onLocationUpdated(safeJSON(Android.getLocation(), {}));
-  };
-
   /* ============ HOME ============ */
   renderDL($("devInfo"), safeJSON(Android.getDeviceInfo(), {}));
 
   /* ============ WI-FI ============ */
-  renderDL($("wifiInfo"), safeJSON(Android.getWifiInfo(), {}));
-
-  /* ---- fetch public IP + ISP (opt-in network call) ---- */
   let publicIpInfo = null;
-  (function fetchPublicIp() {
+  let networkStatsCache = null; // bssid -> stats object
+
+  function loadNetworkStatsCache() {
+    try {
+      const list = safeJSON(Android.getWifiNetworkList(), []);
+      networkStatsCache = {};
+      list.forEach(n => { networkStatsCache[n.bssid] = n; });
+    } catch (e) { networkStatsCache = {}; }
+  }
+  loadNetworkStatsCache();
+
+  function fetchPublicIp() {
     fetch("https://ipwho.is/", { cache: "no-store" })
       .then(r => r.json())
       .then(d => {
         if (d && d.success !== false) {
           publicIpInfo = d;
-          // Merge into the WiFi card if it's already rendered
-          const current = safeJSON(Android.getWifiInfo(), {});
-          current["Public IP"]   = d.ip;
-          current["ISP"]         = d.connection?.isp || d.connection?.org || "—";
-          current["ASN"]         = d.connection?.asn || "—";
-          current["Country"]     = d.country || "—";
-          current["City"]        = d.city || "—";
-          renderDL($("wifiInfo"), current);
+          refreshWifiInfoCard();
         }
       })
       .catch(() => {});
-  })();
+  }
+  fetchPublicIp();
 
-  window.onWifiInfoUpdated = function (info) {
-    if (publicIpInfo) {
-      info["Public IP"] = publicIpInfo.ip;
-      info["ISP"] = publicIpInfo.connection?.isp || publicIpInfo.connection?.org || "—";
-      info["ASN"] = publicIpInfo.connection?.asn || "—";
-      info["Country"] = publicIpInfo.country || "—";
-      info["City"] = publicIpInfo.city || "—";
-    }
-    renderDL($("wifiInfo"), info);
-  };
-
-  /* ---- signal bars helper ---- */
-  function signalInfo(rssi) {
-    const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
-    const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
-    const color = bars === 4 ? "#4ade80" : bars === 3 ? "#a3e635"
-                : bars === 2 ? "#f5c76e" : "#f87171";
-    let svg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
-    for (let i = 0; i < 4; i++) {
-      const h = 4 + i * 3;
-      svg += '<rect x="' + (i * 5) + '" y="' + (16 - h) +
-             '" width="3.5" height="' + h + '" rx="1" fill="' +
-             (i < bars ? color : '#2c3346') + '"/>';
-    }
-    svg += '</svg>';
-    return { svg, pct, color, bars };
+  function buildWifiPrimary(info) {
+    if (info.error) return info;
+    const p = {
+      "SSID": info.SSID,
+      "BSSID": info.BSSID,
+      "Router manufacturer": info.RouterManufacturer || "—",
+      "IP address": info.IPAddress || "—",
+      "Public IP": publicIpInfo ? publicIpInfo.ip : "loading…"
+    };
+    return p;
   }
 
+  function buildWifiMore(info) {
+    if (info.error) return {};
+    const m = {};
+    m["Device MAC"] = info.DeviceMAC || "—";
+    m["Best signal"] = info.BestSignal != null ? (info.BestSignal + " dBm") : "—";
+    m["Latest signal"] = info.LatestSignal != null ? (info.LatestSignal + " dBm") : "—";
+    m["Latest frequency"] = info.LatestFrequency ? (info.LatestFrequency + " MHz (" + freqBand(info.LatestFrequency) + ")") : "—";
+    m["Times found"] = info.TimesFound != null ? info.TimesFound : "—";
+    m["Times connected"] = info.TimesConnected != null ? info.TimesConnected : "—";
+    m["First seen"] = fmtDate(info.FirstSeen);
+    m["Last seen"] = fmtDate(info.LastSeen);
+    if (publicIpInfo) {
+      m["ISP"] = publicIpInfo.connection?.isp || publicIpInfo.connection?.org || "—";
+      m["ASN"] = publicIpInfo.connection?.asn || "—";
+      m["Country"] = publicIpInfo.country || "—";
+      m["City"] = publicIpInfo.city || "—";
+    }
+    m["Link speed"] = info.LinkSpeed != null ? (info.LinkSpeed + " Mbps") : "—";
+    m["Capabilities"] = info.Capabilities || "—";
+    m["IPv4"] = info.IPv4List;
+    m["IPv6"] = info.IPv6List;
+    return m;
+  }
+
+  function refreshWifiInfoCard() {
+    const info = safeJSON(Android.getWifiInfo(), {});
+    renderDL($("wifiInfoPrimary"), buildWifiPrimary(info));
+    const moreEl = $("wifiInfoMore");
+    // Render more details as a <dl>
+    moreEl.innerHTML = "";
+    const dl = document.createElement("dl");
+    dl.style.margin = "0";
+    dl.style.padding = "0";
+    dl.style.border = "none";
+    moreEl.appendChild(dl);
+    renderDL(dl, buildWifiMore(info));
+  }
+
+  window.onWifiInfoUpdated = function (info) {
+    renderDL($("wifiInfoPrimary"), buildWifiPrimary(info));
+    const moreEl = $("wifiInfoMore");
+    moreEl.innerHTML = "";
+    const dl = document.createElement("dl");
+    dl.style.margin = "0";
+    dl.style.padding = "0";
+    dl.style.border = "none";
+    moreEl.appendChild(dl);
+    renderDL(dl, buildWifiMore(info));
+  };
+
+  refreshWifiInfoCard();
+
+  /* ---- Nearby networks ---- */
   function wifiItemHTML(n) {
     const name = n.SSID || "(hidden network)";
     const sig = signalInfo(n.Level);
     const metaHTML = sig.svg + '<span style="color:' + sig.color +
                      ';font-weight:600;">' + sig.pct + '%</span>';
+    const stats = (networkStatsCache && networkStatsCache[n.BSSID]) || {};
+    const manuf = stats.manufacturer || (n.RouterManufacturer || "—");
     const detail =
-      "SSID:         " + name + "\n" +
-      "BSSID:        " + n.BSSID + "\n" +
-      "Signal:       " + n.Level + " dBm (" + sig.pct + "%)\n" +
-      "Bars:         " + sig.bars + " / 4\n" +
-      "Frequency:    " + n.Frequency + " MHz (" + freqBand(n.Frequency) + ")\n" +
-      "Capabilities: " + (n.Capabilities || "(open network)");
+      "SSID:                " + name + "\n" +
+      "BSSID:               " + n.BSSID + "\n" +
+      "Signal:              " + n.Level + " dBm (" + sig.pct + "%)\n" +
+      "Bars:                " + sig.bars + " / 4\n" +
+      "Frequency:           " + n.Frequency + " MHz (" + freqBand(n.Frequency) + ")\n" +
+      "Capabilities:        " + (n.Capabilities || "(open network)") + "\n" +
+      "Router manufacturer: " + manuf + "\n" +
+      "First seen:          " + (stats.firstSeen ? fmtDate(stats.firstSeen) : "—") + "\n" +
+      "Last seen:           " + (stats.lastSeen ? fmtDate(stats.lastSeen) : "—") + "\n" +
+      "Times found:         " + (stats.sightings != null ? stats.sightings : "—") + "\n" +
+      "Times connected:     " + (stats.connections != null ? stats.connections : "—");
     return '<details class="item">' +
       '<summary><span class="name">' + esc(name) + '</span>' +
       '<span class="meta">' + metaHTML + '</span></summary>' +
@@ -719,6 +669,8 @@
     }
     results.sort((a, b) => b.Level - a.Level);
     $("wifiList").innerHTML = results.map(wifiItemHTML).join("");
+    // Refresh stats cache after a scan (sightings were recorded)
+    loadNetworkStatsCache();
   };
 
   window.onWifiScanError = msg => {
@@ -742,20 +694,9 @@
       el.style.display = (k === current ? "" : "none");
     });
     document.querySelector("main").scrollTop = 0;
-
-    // Fullscreen handling: only when the map view is showing AND we're in the WiFi tab
-    const wifiActive = document.querySelector('.tabbar button[data-tab="wifi"]').classList.contains("active");
-    if (current === "map" && wifiActive) {
-      document.body.classList.add("map-fullscreen");
-      wifiViews.map.classList.add("map-fullscreen");
-    } else {
-      document.body.classList.remove("map-fullscreen");
-      wifiViews.map.classList.remove("map-fullscreen");
-    }
-
     if (current === "history") renderWifiHistoryList();
     if (current === "map" && wifiMapInstance) {
-      setTimeout(() => wifiMapInstance.invalidateSize(), 80);
+      setTimeout(() => wifiMapInstance.invalidateSize(), 100);
     }
   }
 
@@ -772,22 +713,47 @@
       wifiStack = ["root"];
       renderWifiView();
     }
-    if (b.dataset.tab !== "wifi") {
-      document.body.classList.remove("map-fullscreen");
-    }
   }));
 
-  /* ---------- History list (unique WiFi names) ---------- */
+  window.__backHandler = function () {
+    if (wifiStack.length > 1) { popWifiView(); return true; }
+    const active = document.querySelector(".tabbar button.active");
+    if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
+    return false;
+  };
+
+  /* ---------- History tabs: Connected / Others ---------- */
+  let historySubTab = "others";
+
+  document.querySelectorAll("#wifiHistoryTabs button").forEach(b => {
+    b.addEventListener("click", () => {
+      historySubTab = b.dataset.htab;
+      document.querySelectorAll("#wifiHistoryTabs button").forEach(x => {
+        x.classList.toggle("active", x === b);
+      });
+      renderWifiHistoryList();
+    });
+  });
+
   function renderWifiHistoryList() {
-    const list = safeJSON(Android.getWifiNetworkList(), []);
+    loadNetworkStatsCache();
+    const all = safeJSON(Android.getWifiNetworkList(), []);
+    const list = historySubTab === "connected"
+      ? all.filter(n => n.connections > 0)
+      : all.filter(n => n.connections === 0);
     list.sort((a, b) => b.lastSeen - a.lastSeen);
+
     $("wifiHistorySummary").textContent =
-      list.length + " unique network" + (list.length === 1 ? "" : "s") +
-      " · sorted by most recent";
+      list.length + " network" + (list.length === 1 ? "" : "s") +
+      " · " + (historySubTab === "connected" ? "connected at least once" : "found but never connected");
 
     if (!list.length) {
       $("wifiHistoryList").innerHTML =
-        '<div class="empty">No history yet. Run a scan or connect to Wi-Fi.</div>';
+        '<div class="empty">' +
+        (historySubTab === "connected"
+          ? "No networks you have connected to yet."
+          : "No other networks found yet. Run a scan.") +
+        '</div>';
       return;
     }
 
@@ -812,6 +778,7 @@
   $("btnClearWifiHistory").addEventListener("click", () => {
     if (!confirm("Clear all Wi-Fi history? This cannot be undone.")) return;
     Android.clearWifiNetworks();
+    networkStatsCache = {};
     renderWifiHistoryList();
   });
 
@@ -828,10 +795,14 @@
     $("wifiMapSubtitle").textContent = pins.length + " network" +
       (pins.length === 1 ? "" : "s") + " pinned at their latest detection";
     pushWifiView("map");
+    // Wait for the view to be visible, then init + render
     setTimeout(() => {
       initWifiMap();
-      setTimeout(() => renderAllPins(pins), 180);
-    }, 80);
+      setTimeout(() => {
+        if (wifiMapInstance) wifiMapInstance.invalidateSize();
+        renderAllPins(pins);
+      }, 250);
+    }, 100);
   });
 
   /* ---------- Network detail ---------- */
@@ -853,7 +824,6 @@
     const sightings   = d.sightings   || [];
     const connections = d.connections || [];
 
-    // Best/latest signal
     let bestLevel = -200, latestLevel = 0, latestFreq = 0;
     if (sightings.length) {
       for (const s of sightings) {
@@ -865,22 +835,42 @@
       latestFreq  = last[5] || 0;
     }
 
-    const freqStr = latestFreq ? latestFreq + " MHz (" + freqBand(latestFreq) + ")" : "—";
-    const manuf   = d.manufacturer || "Unknown";
+    const manuf = d.manufacturer || "Unknown";
 
-    const info = {
-      "SSID":               ssid,
-      "BSSID":              d.bssid || "—",
+    // Primary
+    renderDL($("wifiNetPrimary"), {
+      "SSID": ssid,
+      "BSSID": d.bssid || "—",
       "Router manufacturer": manuf,
-      "Best signal":        bestLevel > -200 ? bestLevel + " dBm" : "—",
-      "Latest signal":      latestLevel ? latestLevel + " dBm" : "—",
-      "Latest frequency":   freqStr,
-      "Times found":        sightings.length,
-      "Times connected":    connections.length,
-      "First seen":         fmtDate(d.firstSeen),
-      "Last seen":          fmtDate(d.lastSeen)
+      "Times found": sightings.length,
+      "Times connected": connections.length
+    });
+
+    // More
+    const curWifi = safeJSON(Android.getWifiInfo(), {});
+    const more = {
+      "Best signal": bestLevel > -200 ? bestLevel + " dBm" : "—",
+      "Latest signal": latestLevel ? latestLevel + " dBm" : "—",
+      "Latest frequency": latestFreq ? latestFreq + " MHz (" + freqBand(latestFreq) + ")" : "—",
+      "First seen": fmtDate(d.firstSeen),
+      "Last seen": fmtDate(d.lastSeen),
+      "Capabilities": (sightings.length ? (sightings[sightings.length-1][5] ? "" : "") : "") || "—",
+      "IPv4": curWifi.IPv4List,
+      "IPv6": curWifi.IPv6List
     };
-    renderDL($("wifiNetCounts"), info);
+    if (publicIpInfo) {
+      more["ISP"] = publicIpInfo.connection?.isp || publicIpInfo.connection?.org || "—";
+      more["Public IP"] = publicIpInfo.ip;
+      more["Country"] = publicIpInfo.country || "—";
+      more["City"] = publicIpInfo.city || "—";
+    }
+
+    const moreEl = $("wifiNetMore");
+    moreEl.innerHTML = "";
+    const dl = document.createElement("dl");
+    dl.style.margin = "0"; dl.style.padding = "0"; dl.style.border = "none";
+    moreEl.appendChild(dl);
+    renderDL(dl, more);
 
     // Reset toggle
     $("wifiNetSightings").style.display = "none";
@@ -907,8 +897,11 @@
           pushWifiView("map");
           setTimeout(() => {
             initWifiMap();
-            setTimeout(() => renderSinglePin(s[1], s[2], ssid, fmtDate(s[0])), 180);
-          }, 80);
+            setTimeout(() => {
+              if (wifiMapInstance) wifiMapInstance.invalidateSize();
+              renderSinglePin(s[1], s[2], ssid, fmtDate(s[0]));
+            }, 250);
+          }, 100);
           return;
         }
       }
@@ -931,10 +924,10 @@
         ? '<button class="mini-btn" data-lat="' + s[1] + '" data-lon="' + s[2] +
           '" data-time="' + esc(t) + '">&#128205; Map</button>'
         : '<span class="mini-muted">no location</span>';
-      return '<div class="sighting-row">' +
-        '<div class="sighting-info">' +
-          '<div class="sighting-time">' + esc(t) + '</div>' +
-          '<div class="sighting-sig">' + sig.svg + ' ' + lvl + ' dBm (' + sig.pct + '%)</div>' +
+      return '<div class="sighting-row" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #1a1f2a;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="color:var(--text-dim);font-family:ui-monospace,monospace;font-size:12px;margin-bottom:3px;">' + esc(t) + '</div>' +
+          '<div style="color:var(--text-dim);font-family:ui-monospace,monospace;font-size:11.5px;">' + sig.svg + ' ' + lvl + ' dBm (' + sig.pct + '%)</div>' +
         '</div>' +
         mapBtn +
       '</div>';
@@ -953,27 +946,30 @@
         pushWifiView("map");
         setTimeout(() => {
           initWifiMap();
-          setTimeout(() => renderSinglePin(lat, lon, name, btn.dataset.time), 180);
-        }, 80);
+          setTimeout(() => {
+            if (wifiMapInstance) wifiMapInstance.invalidateSize();
+            renderSinglePin(lat, lon, name, btn.dataset.time);
+          }, 250);
+        }, 100);
       });
     });
   }
 
-  /* ---------- Leaflet map for WiFi pins ---------- */
+  /* ---------- Leaflet map for WiFi ---------- */
   let wifiMapInstance = null;
   let wifiMapLayer = null;
 
   function initWifiMap() {
     if (wifiMapInstance) return;
     if (typeof L === "undefined") { setTimeout(initWifiMap, 150); return; }
-    wifiMapInstance = L.map("wifiMap", { zoomControl: true }).setView([0, 0], 2);
+    wifiMapInstance = L.map("map", { zoomControl: true }).setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(wifiMapInstance);
     wifiMapLayer = L.layerGroup().addTo(wifiMapInstance);
   }
 
   function renderSinglePin(lat, lon, name, time) {
-    if (!wifiMapInstance) return;
+    if (!wifiMapInstance || !wifiMapLayer) return;
     wifiMapInstance.invalidateSize();
     wifiMapLayer.clearLayers();
     L.marker([lat, lon]).addTo(wifiMapLayer)
@@ -983,7 +979,7 @@
   }
 
   function renderAllPins(pins) {
-    if (!wifiMapInstance) return;
+    if (!wifiMapInstance || !wifiMapLayer) return;
     wifiMapInstance.invalidateSize();
     wifiMapLayer.clearLayers();
     const bounds = [];
@@ -1005,7 +1001,6 @@
     });
     if (bounds.length === 1) {
       wifiMapInstance.setView(bounds[0], 16);
-      wifiMapLayer.eachLayer(l => l.openPopup && l.openPopup());
     } else if (bounds.length > 1) {
       wifiMapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
     }
@@ -1066,29 +1061,41 @@
     openExternal("https://www.google.com/maps?q=" + currentLat + "," + currentLon);
   });
 
-  let map = null, marker = null, trail = null, trailPoints = [];
-  let mapReady = false;
+  window.onLocationUpdated = loc => {
+    renderDL($("locInfo"), loc);
+    if (typeof loc.Latitude === "number") {
+      currentLat = loc.Latitude; currentLon = loc.Longitude;
+      $("btnOpenMaps").disabled = false;
+    }
+  };
+  window.onLocationStateChanged = on => {
+    refreshPermissionBanner();
+    window.onLocationUpdated(safeJSON(Android.getLocation(), {}));
+  };
 
-  function initMap() {
-    if (mapReady) { if (map) setTimeout(() => map.invalidateSize(), 40); return; }
-    if (typeof L === "undefined") { setTimeout(initMap, 150); return; }
-    mapReady = true;
-    map = L.map("map", { zoomControl: true }).setView([0, 0], 2);
+  let locMap = null, locMarker = null, locTrail = null, locTrailPoints = [];
+  let locMapReady = false;
+
+  function initLocMap() {
+    if (locMapReady) { if (locMap) setTimeout(() => locMap.invalidateSize(), 40); return; }
+    if (typeof L === "undefined") { setTimeout(initLocMap, 150); return; }
+    locMapReady = true;
+    locMap = L.map("locMap", { zoomControl: true }).setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
-    trail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.85 }).addTo(map);
-    marker = L.circleMarker([0, 0], { radius: 9, color: "#7c8cff",
-      fillColor: "#7c8cff", fillOpacity: 0.9, weight: 3 }).addTo(map);
-    setTimeout(() => map.invalidateSize(), 80);
-    setTimeout(() => map.invalidateSize(), 400);
-    setTimeout(() => map.invalidateSize(), 1200);
-    drawHistory(safeJSON(Android.getLocationHistory(), []));
+      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(locMap);
+    locTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.85 }).addTo(locMap);
+    locMarker = L.circleMarker([0, 0], { radius: 9, color: "#7c8cff",
+      fillColor: "#7c8cff", fillOpacity: 0.9, weight: 3 }).addTo(locMap);
+    setTimeout(() => locMap.invalidateSize(), 80);
+    setTimeout(() => locMap.invalidateSize(), 400);
+    setTimeout(() => locMap.invalidateSize(), 1200);
+    drawLocHistory(safeJSON(Android.getLocationHistory(), []));
   }
 
-  function drawHistory(hist) {
-    if (!map) return;
-    trailPoints = hist.map(p => [p.lat, p.lon]);
-    trail.setLatLngs(trailPoints);
+  function drawLocHistory(hist) {
+    if (!locMap) return;
+    locTrailPoints = hist.map(p => [p.lat, p.lon]);
+    locTrail.setLatLngs(locTrailPoints);
     $("histCount").textContent = hist.length ? "(" + hist.length + " points)" : "";
     if (!hist.length) {
       $("historyList").innerHTML = '<div class="empty">No saved points yet.</div>';
@@ -1110,10 +1117,10 @@
   }
 
   $("btnRefreshMap").addEventListener("click", () => {
-    initMap();
+    initLocMap();
     setTimeout(() => {
-      if (map) map.invalidateSize();
-      drawHistory(safeJSON(Android.getLocationHistory(), []));
+      if (locMap) locMap.invalidateSize();
+      drawLocHistory(safeJSON(Android.getLocationHistory(), []));
     }, 100);
   });
 
@@ -1121,8 +1128,8 @@
   $("btnLiveTrack").addEventListener("click", () => {
     if (tracking) Android.stopLiveTracking();
     else {
-      initMap();
-      setTimeout(() => { if (map) map.invalidateSize(); }, 100);
+      initLocMap();
+      setTimeout(() => { if (locMap) locMap.invalidateSize(); }, 100);
       Android.startLiveTracking();
     }
   });
@@ -1150,12 +1157,12 @@
     alert("Live tracking: " + msg);
   };
   window.onLiveLocationUpdate = loc => {
-    initMap();
-    if (!map) return;
-    marker.setLatLng([loc.Latitude, loc.Longitude]);
-    trailPoints.push([loc.Latitude, loc.Longitude]);
-    trail.setLatLngs(trailPoints);
-    map.setView([loc.Latitude, loc.Longitude], Math.max(map.getZoom() || 16, 16));
+    initLocMap();
+    if (!locMap) return;
+    locMarker.setLatLng([loc.Latitude, loc.Longitude]);
+    locTrailPoints.push([loc.Latitude, loc.Longitude]);
+    locTrail.setLatLngs(locTrailPoints);
+    locMap.setView([loc.Latitude, loc.Longitude], Math.max(locMap.getZoom() || 16, 16));
     currentLat = loc.Latitude; currentLon = loc.Longitude;
     renderDL($("locInfo"), {
       Latitude: loc.Latitude, Longitude: loc.Longitude,
@@ -1163,24 +1170,24 @@
       MapsUrl: "https://www.google.com/maps?q=" + loc.Latitude + "," + loc.Longitude
     });
     $("btnOpenMaps").disabled = false;
-    if (trailPoints.length % 3 === 0)
-      drawHistory(safeJSON(Android.getLocationHistory(), []));
+    if (locTrailPoints.length % 3 === 0)
+      drawLocHistory(safeJSON(Android.getLocationHistory(), []));
   };
 
   $("btnClearHistory").addEventListener("click", () => {
     if (!confirm("Clear all saved location history?")) return;
     Android.clearLocationHistory();
-    trailPoints = [];
-    if (trail) trail.setLatLngs([]);
-    drawHistory([]);
+    locTrailPoints = [];
+    if (locTrail) locTrail.setLatLngs([]);
+    drawLocHistory([]);
   });
 
   /* Lazy map init when Location tab is first opened */
-  let mapInited = false;
+  let locMapInited = false;
   tabs.forEach(b => b.addEventListener("click", () => {
-    if (b.dataset.tab === "loc" && !mapInited) {
-      mapInited = true;
-      setTimeout(initMap, 150);
+    if (b.dataset.tab === "loc" && !locMapInited) {
+      locMapInited = true;
+      setTimeout(initLocMap, 150);
     }
   }));
 
@@ -1195,8 +1202,7 @@
     $("appFilters").style.display = "none";
     clearTimeout(appsTimeout);
     appsTimeout = setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = "Retry";
+      btn.disabled = false; btn.textContent = "Retry";
       $("appsGrid").innerHTML = '<div class="empty">Timed out. Tap Retry.</div>';
     }, 15000);
     try { Android.loadAppsAsync("all"); }
@@ -1211,8 +1217,7 @@
     clearTimeout(appsTimeout);
     appsCache = apps;
     const btn = $("btnLoadApps");
-    btn.disabled = false;
-    btn.textContent = "Reload apps";
+    btn.disabled = false; btn.textContent = "Reload apps";
     $("appFilters").style.display = "";
     document.querySelectorAll("#appFilters button").forEach(b => {
       b.classList.toggle("btn-primary", b.dataset.filter === currentFilter);
@@ -1243,7 +1248,7 @@
       : '<div class="empty">No apps in this filter.</div>';
   }
 
-  /* ============ Load apps cache on startup ============ */
+  /* Load apps cache on startup */
   (function loadAppsFromCache() {
     try {
       const cached = safeJSON(Android.getCachedApps(), []);
