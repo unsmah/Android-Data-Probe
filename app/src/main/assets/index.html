@@ -8,19 +8,10 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root {
-    --bg: #0a0c10;
-    --card: #12151f;
-    --card2: #171b26;
-    --border: #1f2430;
-    --border-hi: #2c3346;
-    --text: #e6e8ee;
-    --text-dim: #8b93a5;
-    --text-faint: #6b7488;
-    --accent: #7c8cff;
-    --accent-dim: #4a5380;
-    --ok: #4ade80;
-    --warn: #f5c76e;
-    --danger: #f87171;
+    --bg: #0a0c10; --card: #12151f; --card2: #171b26;
+    --border: #1f2430; --border-hi: #2c3346;
+    --text: #e6e8ee; --text-dim: #8b93a5; --text-faint: #6b7488;
+    --accent: #7c8cff; --ok: #4ade80; --warn: #f5c76e; --danger: #f87171;
     --nav-h: 62px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -30,19 +21,13 @@
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     overscroll-behavior: none;
   }
-  body {
-    display: flex; flex-direction: column;
-    height: 100vh; height: 100dvh;
-  }
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
-  /* ============ permission banner ============ */
   .perm-banner {
     display: none; flex-shrink: 0;
     background: linear-gradient(180deg, #2a1a12, #1e140e);
-    border-bottom: 1px solid #5a3a1a;
-    color: var(--warn);
-    padding: 12px 16px;
-    font-size: 13px;
+    border-bottom: 1px solid #5a3a1a; color: var(--warn);
+    padding: 12px 16px; font-size: 13px;
     padding-top: calc(12px + env(safe-area-inset-top, 0px));
   }
   .perm-banner.show { display: block; }
@@ -53,9 +38,7 @@
     padding: 7px 14px; font-size: 12.5px; border-radius: 8px;
     font-family: inherit; cursor: pointer;
   }
-  .perm-actions button:active { background: #4a3018; }
 
-  /* ============ main content ============ */
   main {
     flex: 1; overflow-y: auto; overflow-x: hidden;
     padding: 16px 16px calc(var(--nav-h) + 24px);
@@ -63,26 +46,16 @@
   }
   .tab { display: none; animation: fadeIn .2s ease; }
   .tab.active { display: block; }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-  h1 {
-    font-size: 18px; color: #a8b2ff; margin: 0 0 4px;
-    letter-spacing: -0.3px;
-  }
-  .subtitle {
-    font-size: 12.5px; color: var(--text-faint);
-    margin: 0 0 20px;
-  }
+  h1 { font-size: 18px; color: #a8b2ff; margin: 0 0 4px; letter-spacing: -0.3px; }
+  .subtitle { font-size: 12.5px; color: var(--text-faint); margin: 0 0 20px; }
   h2 {
     font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
     color: var(--text-faint); margin: 22px 0 10px; font-weight: 600;
   }
   h2:first-child { margin-top: 0; }
 
-  /* ============ data rows ============ */
   dl {
     display: grid; grid-template-columns: 42% 1fr; gap: 8px 14px;
     margin: 0; padding: 14px 16px;
@@ -90,14 +63,11 @@
     font-size: 13px;
   }
   dt { color: var(--text-dim); }
-  dd {
-    margin: 0; font-family: ui-monospace, Menlo, monospace;
-    font-size: 12.5px; word-break: break-word; color: #d5dae8;
-  }
+  dd { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+       word-break: break-word; color: #d5dae8; }
   dd a { color: var(--accent); text-decoration: none; }
   dd .err { color: var(--warn); }
 
-  /* ============ buttons ============ */
   .btn {
     font: inherit; font-size: 13.5px; font-weight: 500;
     padding: 10px 16px; border-radius: 10px;
@@ -108,17 +78,23 @@
   }
   .btn:active { transform: scale(0.97); background: #232a3a; }
   .btn:disabled { opacity: 0.55; }
-  .btn-primary {
-    background: linear-gradient(135deg, #3a4680, #2a3160);
-    border-color: #4a5380; color: #cfe0ff;
-  }
-  .btn-primary:active { background: #2a3160; }
-  .btn-danger {
-    background: #2a1216; border-color: #5a1e24; color: #f08c8c;
-  }
+  .btn-primary { background: linear-gradient(135deg, #3a4680, #2a3160);
+                 border-color: #4a5380; color: #cfe0ff; }
+  .btn-danger { background: #2a1216; border-color: #5a1e24; color: #f08c8c; }
   .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 
-  /* ============ list items ============ */
+  .back-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin: -8px 0 14px; padding: 0;
+  }
+  .back-btn {
+    background: none; border: none; color: var(--accent);
+    font: inherit; font-size: 15px; font-weight: 500;
+    padding: 8px 10px 8px 0; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .back-btn:active { opacity: 0.6; }
+
   .item {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 11px; margin-bottom: 8px; overflow: hidden;
@@ -131,16 +107,40 @@
   .item > summary::-webkit-details-marker { display: none; }
   .item[open] > summary { background: var(--card2); }
   .item .name { font-weight: 600; word-break: break-word; }
-  .item .meta {
-    color: var(--text-dim); font-size: 11.5px;
-    font-family: ui-monospace, monospace; flex-shrink: 0;
-  }
+  .item .meta { color: var(--text-dim); font-size: 11.5px;
+                font-family: ui-monospace, monospace; flex-shrink: 0; }
   .item .body {
     padding: 10px 14px 14px; border-top: 1px solid var(--border);
     font-size: 12px; font-family: ui-monospace, monospace;
-    color: #b8c1d4; white-space: pre-wrap; word-break: break-all;
-    line-height: 1.6;
+    color: #b8c1d4; white-space: pre-wrap; word-break: break-all; line-height: 1.6;
   }
+
+  /* Network cards in the history list — big tappable rows with chevron */
+  .net-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 11px; padding: 13px 14px; margin-bottom: 8px;
+    cursor: pointer; display: flex; align-items: center; gap: 12px;
+    transition: background .15s;
+  }
+  .net-card:active { background: var(--card2); }
+  .net-card .left { flex: 1; min-width: 0; }
+  .net-card .net-ssid {
+    font-weight: 600; font-size: 14px; word-break: break-word;
+    margin-bottom: 3px;
+  }
+  .net-card .net-sub {
+    font-size: 11.5px; color: var(--text-dim);
+    font-family: ui-monospace, monospace;
+  }
+  .net-card .net-counts {
+    display: flex; gap: 12px; margin-top: 6px;
+    font-size: 11px; color: var(--text-faint);
+  }
+  .net-card .net-counts strong { color: var(--text-dim); font-weight: 600; }
+  .net-card .chev {
+    color: var(--text-faint); font-size: 20px; flex-shrink: 0;
+  }
+
   .empty {
     color: var(--text-faint); font-size: 12.5px;
     padding: 14px; text-align: center;
@@ -160,66 +160,43 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ============ app grid ============ */
   .app-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
     gap: 14px 8px;
   }
-  .app-tile {
-    display: flex; flex-direction: column; align-items: center;
-    gap: 6px; text-align: center;
-  }
+  .app-tile { display: flex; flex-direction: column; align-items: center;
+              gap: 6px; text-align: center; }
   .app-tile img, .app-tile .fallback {
     width: 48px; height: 48px; border-radius: 12px;
-    background: #1b202c; border: 1px solid #232a3a;
-    object-fit: contain;
+    background: #1b202c; border: 1px solid #232a3a; object-fit: contain;
   }
-  .app-tile .fallback {
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px; font-weight: 700; color: var(--accent);
-  }
-  .app-tile .label {
-    font-size: 10.5px; line-height: 1.25; color: #c8cfe0;
-    word-break: break-word; max-width: 100%;
-  }
+  .app-tile .fallback { display: flex; align-items: center; justify-content: center;
+                        font-size: 20px; font-weight: 700; color: var(--accent); }
+  .app-tile .label { font-size: 10.5px; line-height: 1.25; color: #c8cfe0;
+                     word-break: break-word; max-width: 100%; }
 
-  /* ============ map ============ */
-  #map {
-    height: 280px; border-radius: 12px; overflow: hidden;
-    background: var(--card); border: 1px solid var(--border);
-    margin-top: 4px;
-  }
+  #map { height: 280px; border-radius: 12px; overflow: hidden;
+         background: var(--card); border: 1px solid var(--border); margin-top: 4px; }
   .leaflet-container { background: #12151f; }
 
-  /* ============ history ============ */
-  #historyList {
+  #historyList, #wifiDetailSightings, #wifiDetailConnections {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 11px; overflow: hidden; margin-bottom: 10px;
   }
   .hist-item {
     font-size: 11.5px; font-family: ui-monospace, monospace;
-    color: #b8c1d4; padding: 9px 14px;
-    border-bottom: 1px solid #1a1f2a;
+    color: #b8c1d4; padding: 9px 14px; border-bottom: 1px solid #1a1f2a;
   }
   .hist-item:last-child { border-bottom: none; }
   .hist-item a { color: var(--accent); text-decoration: none; }
 
-  /* ============ live indicator ============ */
-  .live {
-    display: inline-block;
-    font-size: 11px; color: var(--ok);
-    vertical-align: middle; margin-left: 6px;
-  }
-  .live::before {
-    content: ""; display: inline-block;
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--ok); margin-right: 5px;
-    animation: pulse 1.4s ease-in-out infinite;
-  }
+  .live { display: inline-block; font-size: 11px; color: var(--ok);
+          vertical-align: middle; margin-left: 6px; }
+  .live::before { content: ""; display: inline-block;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+    margin-right: 5px; animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-  /* ============ bottom navigation ============ */
   .tabbar {
     position: fixed; bottom: 0; left: 0; right: 0;
     height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
@@ -235,8 +212,7 @@
     align-items: center; justify-content: center; gap: 3px;
     background: none; border: none; color: var(--text-faint);
     font: inherit; font-size: 10.5px; cursor: pointer;
-    padding: 0; position: relative;
-    transition: color .15s;
+    padding: 0; position: relative; transition: color .15s;
   }
   .tabbar button svg {
     width: 22px; height: 22px; stroke: currentColor;
@@ -249,7 +225,6 @@
     width: 28px; height: 2.5px; border-radius: 0 0 3px 3px;
     background: var(--accent);
   }
-  .tabbar button:active { background: rgba(124, 140, 255, 0.08); }
 </style>
 </head>
 <body>
@@ -266,35 +241,57 @@
 
 <main>
 
-  <!-- ================= HOME ================= -->
   <section id="tab-home" class="tab active">
     <h1>Data Probe</h1>
-    <p class="subtitle">Native Android information, gathered locally. Nothing leaves this device.</p>
+    <p class="subtitle">Native Android information, gathered locally.</p>
     <h2>Device &amp; OS</h2>
     <dl id="devInfo"></dl>
   </section>
 
   <!-- ================= WI-FI ================= -->
   <section id="tab-wifi" class="tab">
-    <h1>Wi-Fi</h1>
-    <h2>Current connection</h2>
-    <dl id="wifiInfo"></dl>
-    <h2>Nearby networks</h2>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btnScanWifi">Scan now</button>
-      <button class="btn" id="btnLiveWifi">Start live scan</button>
+    <!-- Root view -->
+    <div id="wifiViewRoot">
+      <h1>Wi-Fi</h1>
+      <h2>Current connection</h2>
+      <dl id="wifiInfo"></dl>
+      <h2>Nearby networks</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnScanWifi">Scan now</button>
+        <button class="btn" id="btnLiveWifi">Start live scan</button>
+      </div>
+      <div id="wifiList"></div>
+      <h2>Wi-Fi history</h2>
+      <button class="btn btn-primary" id="btnWifiNetworks" style="width:100%;">Open Wi-Fi history</button>
     </div>
-    <div id="wifiList"></div>
 
-    <h2>Scan history</h2>
-    <div class="btn-row">
-      <button class="btn" id="btnShowWifiHistory">Show history</button>
-      <button class="btn btn-danger" id="btnClearWifiHistory">Clear</button>
+    <!-- Networks list view -->
+    <div id="wifiViewNetworks" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="wifiBackToRoot">← Wi-Fi</button>
+      </div>
+      <h1>Wi-Fi history</h1>
+      <p class="subtitle" id="wifiNetworksSummary"></p>
+      <div id="wifiNetworksList"></div>
+      <button class="btn btn-danger" id="btnClearWifiNetworks" style="width:100%;">Clear all history</button>
     </div>
-    <div id="wifiHistory"></div>
+
+    <!-- Detail view -->
+    <div id="wifiViewDetail" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="wifiBackToNetworks">← History</button>
+      </div>
+      <h1 id="wifiDetailTitle"></h1>
+      <p class="subtitle" id="wifiDetailSubtitle"></p>
+      <h2>Summary</h2>
+      <dl id="wifiDetailInfo"></dl>
+      <h2>Connections <span id="wifiDetailConnCount" style="font-size:11px;color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
+      <div id="wifiDetailConnections"></div>
+      <h2>Sightings <span id="wifiDetailSigCount" style="font-size:11px;color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
+      <div id="wifiDetailSightings"></div>
+    </div>
   </section>
 
-  <!-- ================= BLUETOOTH ================= -->
   <section id="tab-bt" class="tab">
     <h1>Bluetooth</h1>
     <h2>Paired devices</h2>
@@ -307,7 +304,6 @@
     <div id="btList"></div>
   </section>
 
-  <!-- ================= LOCATION ================= -->
   <section id="tab-loc" class="tab">
     <h1>Location</h1>
     <h2>Last known fix</h2>
@@ -324,7 +320,6 @@
     <button class="btn btn-danger" id="btnClearHistory">Clear history</button>
   </section>
 
-  <!-- ================= APPS ================= -->
   <section id="tab-apps" class="tab">
     <h1>Installed Apps</h1>
     <div class="btn-row">
@@ -368,9 +363,6 @@
 (function () {
   "use strict";
 
-  /* =========================================================
-     Helpers
-     ========================================================= */
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
     ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -381,10 +373,8 @@
     if (!data || Object.keys(data).length === 0) {
       if (emptyMsg) {
         const dd = document.createElement("dd");
-        dd.textContent = emptyMsg;
-        dd.style.color = "#6b7488";
-        dd.style.gridColumn = "1 / -1";
-        el.appendChild(dd);
+        dd.textContent = emptyMsg; dd.style.color = "#6b7488";
+        dd.style.gridColumn = "1 / -1"; el.appendChild(dd);
       }
       return;
     }
@@ -414,21 +404,18 @@
   function deviceTypeLabel(t) {
     return t === 1 ? "Classic" : t === 2 ? "LE" : t === 3 ? "Dual" : "Unknown";
   }
-
   function freqBand(f) {
     return f >= 5925 ? "6 GHz" : f >= 4900 ? "5 GHz" : f >= 2400 ? "2.4 GHz" : f + " MHz";
   }
+  function openExternal(url) { try { location.href = url; } catch (e) {} }
 
-  function openExternal(url) {
-    try {
-      // WebView's shouldOverrideUrlLoading intercepts this and opens externally
-      location.href = url;
-    } catch (e) { console.warn(e); }
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleString();
   }
 
-  /* =========================================================
-     Tab navigation
-     ========================================================= */
+  /* ============ Tabs ============ */
   const tabs = document.querySelectorAll(".tabbar button");
   const tabSections = document.querySelectorAll("main .tab");
 
@@ -440,35 +427,40 @@
   }
   tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 
-  /* =========================================================
-     Permission banner
-     ========================================================= */
-  const permBanner = $("permBanner");
+  /* ============ Back handler ============ */
+  let wifiSubView = "root";
+  let currentBssidForDetail = null;
 
+  window.__backHandler = function () {
+    if (wifiSubView === "detail") { showWifiView("networks"); return true; }
+    if (wifiSubView === "networks") { showWifiView("root"); return true; }
+    const active = document.querySelector(".tabbar button.active");
+    if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
+    return false;
+  };
+
+  /* ============ Permission banner ============ */
+  const permBanner = $("permBanner");
   window.onPermissionsChanged = function (allGranted, locOn, btOn, wifiOn) {
     const needsPerms = !allGranted;
     const needsLoc = allGranted && !locOn;
     const needsBt = allGranted && !btOn;
     const needsWifi = allGranted && !wifiOn;
-
     if (!needsPerms && !needsLoc && !needsBt && !needsWifi) {
       permBanner.classList.remove("show"); return;
     }
     permBanner.classList.add("show");
-
     const parts = [];
     if (needsPerms) parts.push("permissions");
     if (needsLoc) parts.push("Location");
     if (needsBt) parts.push("Bluetooth");
     if (needsWifi) parts.push("Wi-Fi");
     $("permMsg").textContent = "Enable " + parts.join(", ") + " to gather full data";
-
     $("btnGrantPerms").style.display = needsPerms ? "" : "none";
     $("btnEnableLoc").style.display = needsLoc ? "" : "none";
     $("btnEnableBt").style.display = needsBt ? "" : "none";
     $("btnEnableWifi").style.display = needsWifi ? "" : "none";
   };
-
   $("btnGrantPerms").addEventListener("click", () => Android.requestPermissionsFromUi());
   $("btnEnableLoc").addEventListener("click", () => Android.enableLocationFromUi());
   $("btnEnableBt").addEventListener("click", () => Android.enableBluetoothFromUi());
@@ -480,38 +472,27 @@
       st.bluetoothEnabled, st.wifiEnabled);
   }
 
-  /* =========================================================
-     Live-update callbacks (Java → JS)
-     ========================================================= */
-  window.onWifiInfoUpdated = function (info) {
-    renderDL($("wifiInfo"), info);
-  };
-  window.onBondedDevicesUpdated = function (list) {
-    renderBonded(list);
-  };
-  window.onLocationUpdated = function (loc) {
+  /* ============ Update callbacks ============ */
+  window.onWifiInfoUpdated = info => renderDL($("wifiInfo"), info);
+  window.onBondedDevicesUpdated = list => renderBonded(list);
+  window.onLocationUpdated = loc => {
     renderDL($("locInfo"), loc);
     if (typeof loc.Latitude === "number") {
       currentLat = loc.Latitude; currentLon = loc.Longitude;
       $("btnOpenMaps").disabled = false;
     }
   };
-  window.onLocationStateChanged = function (on) {
+  window.onLocationStateChanged = on => {
     refreshPermissionBanner();
     window.onLocationUpdated(safeJSON(Android.getLocation(), {}));
   };
 
-  /* =========================================================
-     HOME
-     ========================================================= */
+  /* ============ HOME ============ */
   renderDL($("devInfo"), safeJSON(Android.getDeviceInfo(), {}));
 
-  /* =========================================================
-     Wi-Fi
-     ========================================================= */
+  /* ============ WI-FI ============ */
   renderDL($("wifiInfo"), safeJSON(Android.getWifiInfo(), {}));
 
-  /* Signal bars renderer */
   function signalInfo(rssi) {
     const pct = Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
     const bars = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
@@ -550,7 +531,7 @@
 
   $("btnScanWifi").addEventListener("click", () => {
     $("btnScanWifi").disabled = true;
-    $("wifiList").innerHTML = '<div class="loading">Scanning nearby networks…</div>';
+    $("wifiList").innerHTML = '<div class="loading">Scanning…</div>';
     Android.startWifiScan();
   });
 
@@ -566,7 +547,7 @@
       $("btnLiveWifi").textContent = "Stop live scan";
       $("btnLiveWifi").classList.remove("btn-primary");
       $("btnLiveWifi").classList.add("btn-danger");
-      $("wifiList").innerHTML = '<div class="loading">Live scanning… (every ~35s)</div>';
+      $("wifiList").innerHTML = '<div class="loading">Live scanning (every ~35s)…</div>';
       Android.startLiveWifiScan();
     }
   });
@@ -575,67 +556,147 @@
     $("btnScanWifi").disabled = false;
     if (!results.length) {
       if (!liveWifiScanning)
-        $("wifiList").innerHTML = '<div class="empty">No networks found.<br>Check Location is on, or wait ~30s between scans.</div>';
+        $("wifiList").innerHTML = '<div class="empty">No networks found.</div>';
       return;
     }
     results.sort((a, b) => b.Level - a.Level);
     $("wifiList").innerHTML = results.map(wifiItemHTML).join("");
   };
 
-  window.onWifiScanError = function (msg) {
+  window.onWifiScanError = msg => {
     $("btnScanWifi").disabled = false;
     if (!liveWifiScanning)
       $("wifiList").innerHTML = '<div class="empty">Scan error: ' + esc(msg) + '</div>';
   };
 
-  /* ---- Wi-Fi scan history ---- */
-  $("btnShowWifiHistory").addEventListener("click", () => {
-    const history = safeJSON(Android.getWifiScanHistory(), []);
-    if (!history.length) {
-      $("wifiHistory").innerHTML = '<div class="empty">No scan history yet. Run a scan first.</div>';
+  /* ---- View switching ---- */
+  const views = { root: $("wifiViewRoot"), networks: $("wifiViewNetworks"), detail: $("wifiViewDetail") };
+  function showWifiView(name) {
+    wifiSubView = name;
+    Object.entries(views).forEach(([k, el]) => el.style.display = (k === name ? "" : "none"));
+    document.querySelector("main").scrollTop = 0;
+    if (name === "networks") renderNetworksList();
+  }
+
+  $("btnWifiNetworks").addEventListener("click", () => showWifiView("networks"));
+  $("wifiBackToRoot").addEventListener("click", () => showWifiView("root"));
+  $("wifiBackToNetworks").addEventListener("click", () => showWifiView("networks"));
+
+  /* ---- Networks list ---- */
+  function renderNetworksList() {
+    const list = safeJSON(Android.getWifiNetworkList(), []);
+    list.sort((a, b) => b.lastSeen - a.lastSeen);
+    $("wifiNetworksSummary").textContent =
+      list.length + " unique network" + (list.length === 1 ? "" : "s") + " in history";
+
+    if (!list.length) {
+      $("wifiNetworksList").innerHTML = '<div class="empty">No history yet. Run a scan or connect to Wi-Fi.</div>';
       return;
     }
-    const recent = history.slice().reverse();
-    $("wifiHistory").innerHTML = recent.map(scan => {
-      const d = new Date(scan.t);
-      const timeStr = d.toLocaleString();
-      const nets = scan.networks || [];
-      const netCount = nets.length;
-      const metaHTML = netCount + " nets";
 
-      let locLine = "Location:   (not available)";
-      let locMapLine = "";
-      if (typeof scan.lat === "number") {
-        locLine = "Location:   " + scan.lat.toFixed(5) + ", " + scan.lon.toFixed(5) +
-                  (scan.acc ? "  (\u00b1" + Math.round(scan.acc) + "m)" : "");
-        locMapLine = "\nMaps:       https://www.google.com/maps?q=" + scan.lat + "," + scan.lon;
-      }
-
-      const netLines = nets.map(n => {
-        const pct = Math.max(0, Math.min(100, Math.round(2 * (n.level + 100))));
-        return "  " + (n.ssid || "(hidden)") + "\n    " + n.bssid +
-               "  " + n.level + " dBm (" + pct + "%)  " + n.freq + " MHz";
-      }).join("\n");
-
-      const body = "Scanned:    " + timeStr + "\n" + locLine + locMapLine +
-                   "\n\nNetworks (" + netCount + "):\n" + netLines;
-
-      return '<details class="item">' +
-        '<summary><span class="name">' + esc(timeStr) + '</span>' +
-        '<span class="meta">' + esc(metaHTML) + '</span></summary>' +
-        '<div class="body">' + esc(body) + '</div></details>';
+    $("wifiNetworksList").innerHTML = list.map(n => {
+      const ssid = n.ssid || "(hidden)";
+      return '<div class="net-card" data-bssid="' + esc(n.bssid) + '">' +
+        '<div class="left">' +
+          '<div class="net-ssid">' + esc(ssid) + '</div>' +
+          '<div class="net-sub">' + esc(n.bssid) + '</div>' +
+          '<div class="net-counts">' +
+            '<span>Seen <strong>' + n.sightings + '</strong>×</span>' +
+            '<span>Connected <strong>' + n.connections + '</strong>×</span>' +
+            '<span>' + esc(fmtDate(n.lastSeen)) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="chev">›</div>' +
+      '</div>';
     }).join("");
+
+    $("wifiNetworksList").querySelectorAll(".net-card").forEach(card => {
+      card.addEventListener("click", () => openNetworkDetail(card.dataset.bssid));
+    });
+  }
+
+  $("btnClearWifiNetworks").addEventListener("click", () => {
+    if (!confirm("Clear all Wi-Fi history? This cannot be undone.")) return;
+    Android.clearWifiNetworks();
+    renderNetworksList();
   });
 
-  $("btnClearWifiHistory").addEventListener("click", () => {
-    if (!confirm("Clear all Wi-Fi scan history?")) return;
-    Android.clearWifiScanHistory();
-    $("wifiHistory").innerHTML = '<div class="empty">History cleared.</div>';
-  });
+  /* ---- Network detail ---- */
+  function openNetworkDetail(bssid) {
+    const detail = safeJSON(Android.getWifiNetworkDetail(bssid), null);
+    if (!detail) { alert("Network not found."); return; }
+    currentBssidForDetail = bssid;
+    showWifiView("detail");
+    renderNetworkDetail(detail);
+  }
 
-  /* =========================================================
-     Bluetooth
-     ========================================================= */
+  function renderNetworkDetail(d) {
+    const ssid = d.ssid || "(hidden)";
+    $("wifiDetailTitle").textContent = ssid;
+    $("wifiDetailSubtitle").textContent = d.bssid || "";
+
+    const sightings = d.sightings || [];
+    const connections = d.connections || [];
+
+    renderDL($("wifiDetailInfo"), {
+      "SSID":        ssid,
+      "BSSID":       d.bssid || "—",
+      "First seen":  fmtDate(d.firstSeen),
+      "Last seen":   fmtDate(d.lastSeen),
+      "Sightings":   sightings.length,
+      "Connections": connections.length
+    });
+
+    /* Connections */
+    $("wifiDetailConnCount").textContent = connections.length ? "(" + connections.length + ")" : "";
+    if (!connections.length) {
+      $("wifiDetailConnections").innerHTML = '<div class="empty">Never connected from this device.</div>';
+    } else {
+      const sorted = connections.slice().reverse();
+      $("wifiDetailConnections").innerHTML = sorted.map(c => {
+        const t = fmtDate(c[0]);
+        let where = "location unavailable";
+        if (typeof c[1] === "number" && typeof c[2] === "number") {
+          where = '<a href="#" data-lat="' + c[1] + '" data-lon="' + c[2] + '">' +
+                  c[1].toFixed(5) + ", " + c[2].toFixed(5) + '</a>';
+        }
+        return '<div class="hist-item">🔗 ' + esc(t) + ' · ' + where + '</div>';
+      }).join("");
+    }
+
+    /* Sightings */
+    $("wifiDetailSigCount").textContent = sightings.length ? "(" + sightings.length + ")" : "";
+    if (!sightings.length) {
+      $("wifiDetailSightings").innerHTML = '<div class="empty">No sightings recorded.</div>';
+    } else {
+      const sorted = sightings.slice().reverse();
+      const show = sorted.slice(0, 300); // display cap for perf; storage is unlimited
+      $("wifiDetailSightings").innerHTML = show.map(s => {
+        const t = fmtDate(s[0]);
+        const sig = signalInfo(s[4] || -100);
+        let where = "location unavailable";
+        if (typeof s[1] === "number" && typeof s[2] === "number") {
+          where = '<a href="#" data-lat="' + s[1] + '" data-lon="' + s[2] + '">' +
+                  s[1].toFixed(5) + ", " + s[2].toFixed(5) + '</a>';
+        }
+        return '<div class="hist-item">' +
+          sig.svg + esc(t) + ' · ' + esc(s[4] || 0) + ' dBm (' + sig.pct + '%) · ' + where +
+        '</div>';
+      }).join("") + (sorted.length > 300
+        ? '<div class="empty">Showing latest 300 of ' + sorted.length + ' sightings.</div>'
+        : "");
+    }
+
+    /* Wire map links */
+    document.querySelectorAll("#wifiDetailConnections a, #wifiDetailSightings a").forEach(a => {
+      a.addEventListener("click", e => {
+        e.preventDefault();
+        openExternal("https://www.google.com/maps?q=" + a.dataset.lat + "," + a.dataset.lon);
+      });
+    });
+  }
+
+  /* ============ BLUETOOTH ============ */
   function renderBonded(list) {
     $("btPaired").innerHTML = list.length
       ? list.map(d => itemHTML(d.Name, d.Address,
@@ -646,64 +707,50 @@
   renderBonded(safeJSON(Android.getBluetoothBondedDevices(), []));
 
   const btSeen = new Set();
-
   $("btnScanBt").addEventListener("click", () => {
     btSeen.clear();
     $("btnScanBt").disabled = true;
-    $("btList").innerHTML = '<div class="loading">Scanning for nearby devices…</div>';
+    $("btList").innerHTML = '<div class="loading">Scanning…</div>';
     Android.startBluetoothDiscovery();
   });
   $("btnStopBt").addEventListener("click", () => Android.stopBluetoothDiscovery());
 
-  window.onBluetoothDeviceFound = function (d) {
+  window.onBluetoothDeviceFound = d => {
     if (btSeen.has(d.Address)) return;
     btSeen.add(d.Address);
     if (btSeen.size === 1) $("btList").innerHTML = "";
     $("btList").insertAdjacentHTML("beforeend", itemHTML(d.Name, d.RSSI + "dBm",
-      "Name:     " + d.Name + "\n" +
-      "Address:  " + d.Address + "\n" +
-      "RSSI:     " + d.RSSI + " dBm\n" +
-      "Type:     " + deviceTypeLabel(d.Type) + "\n" +
-      "Paired:   " + (d.Bonded ? "yes" : "no") + "\n" +
-      "Source:   " + (d.Source === "ble" ? "BLE" : "Classic")));
+      "Name:     " + d.Name + "\nAddress:  " + d.Address + "\nRSSI:     " + d.RSSI + " dBm\n" +
+      "Type:     " + deviceTypeLabel(d.Type) + "\nPaired:   " + (d.Bonded ? "yes" : "no") +
+      "\nSource:   " + (d.Source === "ble" ? "BLE" : "Classic")));
   };
 
-  window.onBluetoothScanComplete = function () {
+  window.onBluetoothScanComplete = () => {
     $("btnScanBt").disabled = false;
-    if (btSeen.size === 0)
-      $("btList").innerHTML = '<div class="empty">No devices found.</div>';
-    else
-      $("btList").insertAdjacentHTML("beforeend",
-        '<div class="empty">— scan complete (' + btSeen.size + ' device' +
-        (btSeen.size === 1 ? "" : "s") + ') —</div>');
+    if (btSeen.size === 0) $("btList").innerHTML = '<div class="empty">No devices found.</div>';
+    else $("btList").insertAdjacentHTML("beforeend",
+      '<div class="empty">— scan complete (' + btSeen.size + ') —</div>');
   };
 
-  window.onBluetoothError = function (msg) {
+  window.onBluetoothError = msg => {
     $("btnScanBt").disabled = false;
     $("btList").innerHTML = '<div class="empty">Error: ' + esc(msg) + '</div>';
   };
 
-  /* =========================================================
-     Location
-     ========================================================= */
+  /* ============ LOCATION ============ */
   let currentLat = null, currentLon = null;
-
   renderDL($("locInfo"), safeJSON(Android.getLocation(), {}));
   const initialLoc = safeJSON(Android.getLocation(), {});
   if (typeof initialLoc.Latitude === "number") {
-    currentLat = initialLoc.Latitude;
-    currentLon = initialLoc.Longitude;
+    currentLat = initialLoc.Latitude; currentLon = initialLoc.Longitude;
     $("btnOpenMaps").disabled = false;
-  } else {
-    $("btnOpenMaps").disabled = true;
-  }
+  } else $("btnOpenMaps").disabled = true;
 
   $("btnOpenMaps").addEventListener("click", () => {
     if (currentLat == null) return;
     openExternal("https://www.google.com/maps?q=" + currentLat + "," + currentLon);
   });
 
-  /* ---- Leaflet map ---- */
   let map = null, marker = null, trail = null, trailPoints = [];
   let mapReady = false;
 
@@ -711,21 +758,15 @@
     if (mapReady) { if (map) setTimeout(() => map.invalidateSize(), 40); return; }
     if (typeof L === "undefined") { setTimeout(initMap, 150); return; }
     mapReady = true;
-
     map = L.map("map", { zoomControl: true }).setView([0, 0], 2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, attribution: "© OpenStreetMap"
-    }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
     trail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.85 }).addTo(map);
-    marker = L.circleMarker([0, 0], {
-      radius: 9, color: "#7c8cff", fillColor: "#7c8cff",
-      fillOpacity: 0.9, weight: 3
-    }).addTo(map);
-
+    marker = L.circleMarker([0, 0], { radius: 9, color: "#7c8cff",
+      fillColor: "#7c8cff", fillOpacity: 0.9, weight: 3 }).addTo(map);
     setTimeout(() => map.invalidateSize(), 80);
     setTimeout(() => map.invalidateSize(), 400);
     setTimeout(() => map.invalidateSize(), 1200);
-
     drawHistory(safeJSON(Android.getLocationHistory(), []));
   }
 
@@ -734,20 +775,17 @@
     trailPoints = hist.map(p => [p.lat, p.lon]);
     trail.setLatLngs(trailPoints);
     $("histCount").textContent = hist.length ? "(" + hist.length + " points)" : "";
-
     if (!hist.length) {
       $("historyList").innerHTML = '<div class="empty">No saved points yet.</div>';
       return;
     }
     const recent = hist.slice(-20).reverse();
-    $("historyList").innerHTML = recent.map(p => {
-      const t = new Date(p.t).toLocaleString();
-      return '<div class="hist-item">' +
-        '<a href="#" data-lat="' + p.lat + '" data-lon="' + p.lon + '">' +
-        p.lat.toFixed(5) + ", " + p.lon.toFixed(5) + '</a>' +
-        "  ±" + Math.round(p.acc || 0) + "m · " + t + '</div>';
-    }).join("");
-
+    $("historyList").innerHTML = recent.map(p =>
+      '<div class="hist-item">' +
+      '<a href="#" data-lat="' + p.lat + '" data-lon="' + p.lon + '">' +
+      p.lat.toFixed(5) + ", " + p.lon.toFixed(5) + '</a>' +
+      "  ±" + Math.round(p.acc || 0) + "m · " + new Date(p.t).toLocaleString() + '</div>'
+    ).join("");
     $("historyList").querySelectorAll("a").forEach(a => {
       a.addEventListener("click", e => {
         e.preventDefault();
@@ -764,69 +802,54 @@
     }, 100);
   });
 
-  /* ---- Live tracking ---- */
   let tracking = false;
-
   $("btnLiveTrack").addEventListener("click", () => {
-    if (tracking) {
-      Android.stopLiveTracking();
-    } else {
+    if (tracking) Android.stopLiveTracking();
+    else {
       initMap();
       setTimeout(() => { if (map) map.invalidateSize(); }, 100);
       Android.startLiveTracking();
     }
   });
 
-  window.onLiveLocationStarted = function () {
+  window.onLiveLocationStarted = () => {
     tracking = true;
     const b = $("btnLiveTrack");
     b.textContent = "Stop live tracking";
-    b.classList.remove("btn-primary");
-    b.classList.add("btn-danger");
+    b.classList.remove("btn-primary"); b.classList.add("btn-danger");
     $("liveIndicator").style.display = "inline";
   };
-
-  window.onLiveLocationStopped = function () {
+  window.onLiveLocationStopped = () => {
     tracking = false;
     const b = $("btnLiveTrack");
     b.textContent = "Start live tracking";
-    b.classList.remove("btn-danger");
-    b.classList.add("btn-primary");
+    b.classList.remove("btn-danger"); b.classList.add("btn-primary");
     $("liveIndicator").style.display = "none";
   };
-
-  window.onLiveLocationError = function (msg) {
+  window.onLiveLocationError = msg => {
     tracking = false;
     const b = $("btnLiveTrack");
     b.textContent = "Start live tracking";
-    b.classList.remove("btn-danger");
-    b.classList.add("btn-primary");
+    b.classList.remove("btn-danger"); b.classList.add("btn-primary");
     $("liveIndicator").style.display = "none";
     alert("Live tracking: " + msg);
   };
-
-  window.onLiveLocationUpdate = function (loc) {
+  window.onLiveLocationUpdate = loc => {
     initMap();
     if (!map) return;
     marker.setLatLng([loc.Latitude, loc.Longitude]);
     trailPoints.push([loc.Latitude, loc.Longitude]);
     trail.setLatLngs(trailPoints);
     map.setView([loc.Latitude, loc.Longitude], Math.max(map.getZoom() || 16, 16));
-
     currentLat = loc.Latitude; currentLon = loc.Longitude;
     renderDL($("locInfo"), {
-      Latitude: loc.Latitude,
-      Longitude: loc.Longitude,
-      Accuracy: loc.Accuracy,
-      Altitude: loc.Altitude,
-      Speed: loc.Speed,
+      Latitude: loc.Latitude, Longitude: loc.Longitude,
+      Accuracy: loc.Accuracy, Altitude: loc.Altitude, Speed: loc.Speed,
       MapsUrl: "https://www.google.com/maps?q=" + loc.Latitude + "," + loc.Longitude
     });
     $("btnOpenMaps").disabled = false;
-
-    if (trailPoints.length % 3 === 0) {
+    if (trailPoints.length % 3 === 0)
       drawHistory(safeJSON(Android.getLocationHistory(), []));
-    }
   };
 
   $("btnClearHistory").addEventListener("click", () => {
@@ -837,27 +860,17 @@
     drawHistory([]);
   });
 
-  /* Initial map setup — only when Location tab is first shown */
+  /* Lazy map init when Location tab is first opened */
   let mapInited = false;
-  const origShowTab = showTab;
-  showTab = function (name) {
-    origShowTab(name);
-    if (name === "loc" && !mapInited) {
+  tabs.forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.tab === "loc" && !mapInited) {
       mapInited = true;
       setTimeout(initMap, 150);
     }
-  };
-  tabs.forEach(b => {
-    b.removeEventListener("click", showTab);
-  });
-  tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  }));
 
-  /* =========================================================
-     Installed apps
-     ========================================================= */
-  let appsCache = null;
-  let currentFilter = "all";
-  let appsTimeout = null;
+  /* ============ INSTALLED APPS ============ */
+  let appsCache = null, currentFilter = "all", appsTimeout = null;
 
   $("btnLoadApps").addEventListener("click", () => {
     const btn = $("btnLoadApps");
@@ -865,26 +878,21 @@
     btn.textContent = "Loading…";
     $("appsGrid").innerHTML = '<div class="loading">Reading installed applications…</div>';
     $("appFilters").style.display = "none";
-
-    // Safety net in case the Java callback never arrives
     clearTimeout(appsTimeout);
     appsTimeout = setTimeout(() => {
       btn.disabled = false;
       btn.textContent = "Retry";
       $("appsGrid").innerHTML = '<div class="empty">Timed out. Tap Retry.</div>';
     }, 15000);
-
-    try {
-      Android.loadAppsAsync("all");
-    } catch (e) {
+    try { Android.loadAppsAsync("all"); }
+    catch (e) {
       clearTimeout(appsTimeout);
-      btn.disabled = false;
-      btn.textContent = "Retry";
-      $("appsGrid").innerHTML = '<div class="empty">Failed to start: ' + esc(e.message) + '</div>';
+      btn.disabled = false; btn.textContent = "Retry";
+      $("appsGrid").innerHTML = '<div class="empty">Failed: ' + esc(e.message) + '</div>';
     }
   });
 
-  window.onAppsLoaded = function (apps) {
+  window.onAppsLoaded = apps => {
     clearTimeout(appsTimeout);
     appsCache = apps;
     const btn = $("btnLoadApps");
@@ -920,9 +928,7 @@
       : '<div class="empty">No apps in this filter.</div>';
   }
 
-  /* =========================================================
-     Load apps from cache on startup
-     ========================================================= */
+  /* ============ Load apps cache on startup ============ */
   (function loadAppsFromCache() {
     try {
       const cached = safeJSON(Android.getCachedApps(), []);
@@ -935,12 +941,9 @@
         });
         renderApps(appsCache, currentFilter);
       }
-    } catch (e) { console.warn("cache load failed:", e); }
+    } catch (e) {}
   })();
 
-  /* =========================================================
-     Initial pull of permission state
-     ========================================================= */
   refreshPermissionBanner();
 
 })();
