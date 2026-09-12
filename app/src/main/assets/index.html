@@ -5,28 +5,59 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Native Data Probe</title>
 <style>
-  body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:20px; }
-  h1 { font-size:20px; color:#a8b2ff; }
-  h2 { font-size:14px; color:#7c8cff; border-bottom:1px solid #1f2430; padding-bottom:5px; margin-top:25px; }
+  body { font: 15px system-ui; background:#0a0c10; color:#e6e8ee; padding:18px; }
+  h1 { font-size:20px; color:#a8b2ff; margin-bottom:8px; }
+  h2 { font-size:15px; color:#7c8cff; border-bottom:1px solid #1f2430;
+       padding-bottom:5px; margin-top:28px; }
+  h3 { font-size:13px; color:#8b93a5; margin-top:18px; margin-bottom:8px; }
   dl { display:grid; grid-template-columns: 40% 1fr; gap:6px 14px; font-size:13px; }
   dt { color:#8b93a5; }
   dd { font-family: monospace; word-break: break-all; margin:0; }
-  pre { font-size:11px; max-height:200px; overflow:auto; background:#12151f; padding:10px; border-radius:8px; }
+  pre { font-size:11.5px; max-height:240px; overflow:auto; background:#12151f;
+        padding:12px; border-radius:8px; margin:0; line-height:1.55;
+        white-space:pre-wrap; word-break:break-all; }
+  button { font:inherit; font-size:13px; padding:9px 14px; border-radius:8px;
+           border:1px solid #2c3346; background:#171b26; color:#e6e8ee;
+           cursor:pointer; margin:0 6px 8px 0; }
+  button:active { background:#232a3a; }
+  .banner { display:none; background:#2a1a12; border:1px solid #5a3a1a;
+            color:#f5c76e; padding:12px 14px; border-radius:10px; margin:14px 0;
+            font-size:13.5px; }
+  .banner button { background:#3a2412; border-color:#5a3a1a; color:#f5c76e;
+                   padding:6px 12px; font-size:12.5px; margin-left:8px; }
 </style>
 </head>
 <body>
 <h1>Native Android Data Probe</h1>
 
+<div class="banner" id="locBanner">
+  ⚠️ Location services are off. Wi-Fi scan results will be empty.
+  <button onclick="Android.openLocationSettings()">Turn on location</button>
+</div>
+
 <h2>Device & OS</h2>
 <dl id="device"></dl>
 
 <h2>Wi-Fi</h2>
+<h3>Current connection</h3>
 <dl id="wifi"></dl>
-<h3>Nearby Networks</h3>
-<pre id="wifiScan"></pre>
+
+<h3>Saved networks</h3>
+<button onclick="loadSavedWifi()">Load saved networks</button>
+<pre id="savedWifi">Tap the button to load.</pre>
+
+<h3>Live scan</h3>
+<button onclick="startWifiScan()">Scan now</button>
+<pre id="wifiScan">Tap Scan to see nearby networks.</pre>
 
 <h2>Bluetooth</h2>
-<pre id="bluetooth"></pre>
+<h3>Paired devices</h3>
+<pre id="bluetooth">Loading…</pre>
+
+<h3>Live discovery</h3>
+<button onclick="startBtScan()">Start scan</button>
+<button onclick="Android.stopBluetoothDiscovery()">Stop</button>
+<pre id="btScan">Tap Start to discover nearby devices. Scan runs ~12 seconds.</pre>
 
 <h2>Location</h2>
 <dl id="location"></dl>
@@ -38,8 +69,10 @@
 <pre id="accounts"></pre>
 
 <script>
+  const $ = id => document.getElementById(id);
+
   const render = (id, data) => {
-    const el = document.getElementById(id);
+    const el = $(id);
     if (!el || !data) return;
     el.innerHTML = "";
     for (const [k, v] of Object.entries(data)) {
@@ -50,29 +83,103 @@
     }
   };
 
+  /* ---------- initial load ---------- */
   render("device", JSON.parse(Android.getDeviceInfo()));
   render("wifi", JSON.parse(Android.getWifiInfo()));
-
-  const wifiScan = JSON.parse(Android.getWifiScanResults());
-  document.getElementById("wifiScan").textContent = wifiScan.length
-    ? wifiScan.map(n => n.SSID + " (" + n.BSSID + ") | " + n.Level + "dBm").join("\n")
-    : "No scan results. Ensure location is on.";
-
-  const bt = JSON.parse(Android.getBluetoothBondedDevices());
-  document.getElementById("bluetooth").textContent = bt.length
-    ? bt.map(d => d.Name + " (" + d.Address + ")").join("\n")
-    : "No bonded devices.";
-
   render("location", JSON.parse(Android.getLocation()));
 
+  const bonded = JSON.parse(Android.getBluetoothBondedDevices());
+  $("bluetooth").textContent = bonded.length
+    ? bonded.map(d => `${d.Name} | ${d.Address}`).join("\n")
+    : "No paired devices.";
+
   const apps = JSON.parse(Android.getInstalledApps());
-  document.getElementById("apps").textContent = apps.slice(0, 30)
-    .map(a => a.Name + " (" + a.Package + ")").join("\n");
+  $("apps").textContent = apps.slice(0, 30)
+    .map(a => `${a.Name}  (${a.Package})`).join("\n");
 
   const accounts = JSON.parse(Android.getAccounts());
-  document.getElementById("accounts").textContent = accounts.length
-    ? accounts.map(a => a.Name + " [" + a.Type + "]").join("\n")
+  $("accounts").textContent = accounts.length
+    ? accounts.map(a => `${a.Name} [${a.Type}]`).join("\n")
     : "No accounts found.";
+
+  if (!Android.isLocationEnabled()) $("locBanner").style.display = "block";
+
+  /* ---------- saved Wi-Fi ---------- */
+  window.loadSavedWifi = function () {
+    const data = JSON.parse(Android.getSavedWifiNetworks());
+    if (!data.length) {
+      $("savedWifi").textContent =
+        "(no saved networks returned)\n\n" +
+        "On Android 10+, getConfiguredNetworks() returns empty for regular apps " +
+        "unless the app is a device owner or has carrier privileges. The list below " +
+        "is only populated on older Android or with system-level access.";
+      return;
+    }
+    $("savedWifi").textContent = data.map(n =>
+      n.error ? "error: " + n.error
+              : `${n.SSID}\n  BSSID: ${n.BSSID}  id: ${n.NetworkId}  priority: ${n.Priority}`
+    ).join("\n\n");
+  };
+
+  /* ---------- live Wi-Fi scan ---------- */
+  window.startWifiScan = function () {
+    $("wifiScan").textContent = "Scanning…";
+    Android.startWifiScan();
+  };
+
+  window.onWifiScanComplete = function (results) {
+    if (!results.length) {
+      $("wifiScan").textContent =
+        "No networks found. Check:\n" +
+        "  • Location services are ON\n" +
+        "  • Location permission granted\n" +
+        "  • Wait ~30s between scans (Android rate-limits scans)";
+      return;
+    }
+    results.sort((a, b) => b.Level - a.Level);
+    $("wifiScan").textContent = results.map(n =>
+      `${n.SSID || "(hidden)"}  ${n.Level}dBm\n  ${n.BSSID}  ${n.Frequency}MHz  ${n.Capabilities}`
+    ).join("\n\n");
+  };
+
+  window.onWifiScanError = function (msg) {
+    $("wifiScan").textContent = "Scan error: " + msg;
+  };
+
+  /* ---------- live Bluetooth discovery ---------- */
+  const seenBt = new Set();
+
+  window.startBtScan = function () {
+    seenBt.clear();
+    $("btScan").textContent = "Scanning…";
+    Android.startBluetoothDiscovery();
+  };
+
+  window.onBluetoothDeviceFound = function (device) {
+    if (seenBt.has(device.Address)) return;
+    seenBt.add(device.Address);
+    const line = `${device.Name}\n  ${device.Address}  ${device.RSSI}dBm${device.Bonded ? "  [paired]" : ""}`;
+    const el = $("btScan");
+    el.textContent = (el.textContent === "Scanning…") ? line : el.textContent + "\n\n" + line;
+  };
+
+  window.onBluetoothScanComplete = function () {
+    const el = $("btScan");
+    if (el.textContent === "Scanning…" || !el.textContent.trim()) {
+      el.textContent = "(no devices found)";
+    }
+    el.textContent += "\n\n— scan complete —";
+  };
+
+  window.onBluetoothError = function (msg) {
+    $("btScan").textContent = "Error: " + msg;
+  };
+
+  /* ---------- location state callback ---------- */
+  window.onLocationStateChanged = function (on) {
+    $("locBanner").style.display = on ? "none" : "block";
+    if (on) render("location", JSON.parse(Android.getLocation()));
+  };
 </script>
 </body>
 </html>
