@@ -549,6 +549,39 @@
     font-family: ui-monospace, monospace;
   }
   .session-card .s-chev { color: var(--text-faint); font-size: 22px; }
+
+  .loc-signal-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text-dim);
+    margin: 6px 0 14px;
+  }
+  .loc-signal-row .sig-label { color: var(--text-faint); font-size: 12px; }
+  /* Custom controls (zoom + fullscreen stacked) */
+  .custom-map-controls {
+    background: #fff;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    overflow: hidden;
+  }
+  .custom-map-controls .map-ctl-btn {
+    display: block;
+    width: 32px; height: 32px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #ccc;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .custom-map-controls .map-ctl-btn:last-child { border-bottom: none; }
+  .custom-map-controls .map-ctl-btn:active { background: #eee; }
+  /* Compact layer control when collapsed */
+  .leaflet-control-layers { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -706,6 +739,7 @@
     <div id="locViewRoot">
       <h1 id="locHeaderName">Location</h1>
       <p class="subtitle" id="locHeaderCoords">Waiting for GPS fix…</p>
+      <div id="locHeaderSignal" class="loc-signal-row"></div>
 
       <div class="btn-row">
         <button class="btn btn-primary" id="btnLocate" style="flex:1;">&#128205; Locate</button>
@@ -2177,23 +2211,108 @@
 
   /* ============ LOCATION ============ */
 
+  /* ---------- Base layers: satellite, hybrid, topographic, etc. ---------- */
   function buildBaseLayers() {
     return {
       "OpenStreetMap": L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         { maxZoom: 19, attribution: "© OpenStreetMap" }),
-      "Satellite": L.tileLayer(
+      "OSM Humanitarian": L.tileLayer(
+        "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+        { maxZoom: 19, attribution: "© OpenStreetMap, HOT" }),
+      "OpenTopoMap": L.tileLayer(
+        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        { maxZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA)" }),
+      "Carto Light": L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        { maxZoom: 19, attribution: "© CARTO, OpenStreetMap" }),
+      "Carto Dark": L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        { maxZoom: 19, attribution: "© CARTO, OpenStreetMap" }),
+      "Satellite (Esri)": L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { maxZoom: 19, attribution: "© Esri" }),
+        { maxZoom: 19, attribution: "© Esri, Maxar" }),
+      "Google Streets": L.tileLayer(
+        "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+        { maxZoom: 20, attribution: "© Google" }),
+      "Google Satellite": L.tileLayer(
+        "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        { maxZoom: 20, attribution: "© Google" }),
       "Google Hybrid": L.tileLayer(
         "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         { maxZoom: 20, attribution: "© Google" })
     };
   }
 
+  /* ---------- Colored pin icon factory ---------- */
+  function makePin(color) {
+    return L.divIcon({
+      className: "",
+      html: '<svg width="28" height="40" viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M14 1C6.8 1 1 6.8 1 14c0 9.5 13 24 13 24s13-14.5 13-24C27 6.8 21.2 1 14 1z" ' +
+            'fill="' + color + '" stroke="#0a0c10" stroke-width="1.5"/>' +
+            '<circle cx="14" cy="14" r="4.5" fill="#fff"/></svg>',
+      iconSize: [28, 40],
+      iconAnchor: [14, 40],
+      popupAnchor: [0, -38]
+    });
+  }
+  const PIN_CURRENT = makePin("#7c8cff");
+  const PIN_START   = makePin("#4ade80");
+  const PIN_END     = makePin("#f87171");
+
+  /* ---------- Custom controls (zoom + fullscreen stacked) ---------- */
+  function makeControlStack(map, elId) {
+    const Ctl = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd: function (m) {
+        const wrap = L.DomUtil.create("div", "custom-map-controls");
+        const zin = L.DomUtil.create("button", "map-ctl-btn", wrap);
+        zin.innerHTML = "+";
+        zin.title = "Zoom in";
+        L.DomEvent.disableClickPropagation(zin);
+        L.DomEvent.on(zin, "click", e => { L.DomEvent.stop(e); m.zoomIn(); });
+
+        const zout = L.DomUtil.create("button", "map-ctl-btn", wrap);
+        zout.innerHTML = "&#8722;";
+        zout.title = "Zoom out";
+        L.DomEvent.disableClickPropagation(zout);
+        L.DomEvent.on(zout, "click", e => { L.DomEvent.stop(e); m.zoomOut(); });
+
+        const fs = L.DomUtil.create("button", "map-ctl-btn", wrap);
+        fs.innerHTML = "&#x26F6;";
+        fs.title = "Fullscreen";
+        L.DomEvent.disableClickPropagation(fs);
+        L.DomEvent.on(fs, "click", e => {
+          L.DomEvent.stop(e);
+          const el = $(elId);
+          const isFs = el.classList.toggle("map-fullscreen");
+          fs.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+          fs.title = isFs ? "Exit fullscreen" : "Fullscreen";
+          setTimeout(() => m.invalidateSize(), 120);
+        });
+        return wrap;
+      }
+    });
+    return new Ctl();
+  }
+
   /* ---------- Header ---------- */
   let currentLat = null, currentLon = null;
   let locAutoTimer = null;
+
+  function renderSignalBars(bars) {
+    const colors = ["#f87171", "#f5c76e", "#a3e635", "#4ade80"];
+    let svg = '<svg width="26" height="18" viewBox="0 0 26 18" style="vertical-align:middle;">';
+    for (let i = 0; i < 4; i++) {
+      const h = 5 + i * 3.5;
+      svg += '<rect x="' + (i * 6) + '" y="' + (18 - h) +
+        '" width="4" height="' + h + '" rx="1" fill="' +
+        (i < bars ? colors[Math.max(0, bars - 1)] : '#2c3346') + '"/>';
+    }
+    svg += '</svg>';
+    return svg;
+  }
 
   function renderLocHeader() {
     const loc = safeJSON(Android.getLocationDetail(), {});
@@ -2201,6 +2320,7 @@
       $("locHeaderName").textContent = "Location";
       $("locHeaderCoords").textContent = loc.error || "Waiting for GPS fix…";
       $("btnOpenGmaps").disabled = true;
+      $("locHeaderSignal").innerHTML = "";
       $("locMoreBody").innerHTML = '<div class="kv-empty">No fix yet.</div>';
       return;
     }
@@ -2213,24 +2333,20 @@
     $("btnOpenGmaps").disabled = false;
 
     const bars = loc.SignalBars || 0;
-    const colors = ["#f87171", "#f5c76e", "#a3e635", "#4ade80"];
-    let barsSvg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
-    for (let i = 0; i < 4; i++) {
-      const h = 4 + i * 3;
-      barsSvg += '<rect x="' + (i * 5) + '" y="' + (16 - h) +
-        '" width="3.5" height="' + h + '" rx="1" fill="' +
-        (i < bars ? colors[Math.max(0, bars - 1)] : '#2c3346') + '"/>';
-    }
-    barsSvg += '</svg>';
+    const signalText = bars > 0
+      ? (bars + " / 4 · " + ((loc.SatellitesUsed || 0) + " / " + (loc.Satellites || 0) + " satellites"))
+      : "no signal";
+    $("locHeaderSignal").innerHTML =
+      renderSignalBars(bars) +
+      '<span style="margin-left:8px;">' + esc(signalText) + '</span>';
 
+    // More-details table (GPS signal removed — it's now in the header)
     const rows = {
       "Latitude":   loc.Latitude,
       "Longitude":  loc.Longitude,
       "Accuracy":   (loc.Accuracy != null) ? loc.Accuracy.toFixed(1) + " m" : "—",
       "Altitude":   (loc.Altitude != null) ? loc.Altitude.toFixed(1) + " m" : "—",
-      "Speed":      (loc.Speed != null) ? (loc.Speed * 3.6).toFixed(1) + " km/h" : "—",
-      "GPS signal": bars > 0 ? (bars + " / 4") : "no signal",
-      "Satellites": (loc.SatellitesUsed || 0) + " / " + (loc.Satellites || 0) + " in fix"
+      "Speed":      (loc.Speed != null) ? (loc.Speed * 3.6).toFixed(1) + " km/h" : "—"
     };
     const body = $("locMoreBody");
     body.innerHTML = "";
@@ -2242,8 +2358,7 @@
       tdL.className = "kv-label"; tdL.textContent = k;
       const tdV = document.createElement("td");
       tdV.className = "kv-value";
-      if (k === "GPS signal") tdV.innerHTML = barsSvg + esc(String(v));
-      else tdV.textContent = v == null ? "—" : String(v);
+      tdV.textContent = v == null ? "—" : String(v);
       tr.append(tdL, tdV);
       tbl.appendChild(tr);
     }
@@ -2283,40 +2398,21 @@
     if (typeof L === "undefined") { setTimeout(initTrackerMap, 150); return; }
 
     trackerMap = L.map("trackerMap", {
-      zoomControl: true, attributionControl: true
+      zoomControl: false,   // we supply our own
+      attributionControl: true
     }).setView([0, 0], 2);
 
     const baseLayers = buildBaseLayers();
     baseLayers["OpenStreetMap"].addTo(trackerMap);
+    // collapsed: true → layers panel only visible on click
     L.control.layers(baseLayers, null, {
-      position: "topright", collapsed: false
+      position: "topright", collapsed: true
     }).addTo(trackerMap);
 
-    const FsCtl = L.Control.extend({
-      options: { position: "topright" },
-      onAdd: function () {
-        const btn = L.DomUtil.create("button", "fs-btn");
-        btn.innerHTML = "&#x26F6;";
-        btn.title = "Fullscreen";
-        L.DomEvent.disableClickPropagation(btn);
-        L.DomEvent.on(btn, "click", function (e) {
-          L.DomEvent.stop(e);
-          const el = $("trackerMap");
-          const isFs = el.classList.toggle("map-fullscreen");
-          btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
-          btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
-          setTimeout(() => trackerMap && trackerMap.invalidateSize(), 120);
-        });
-        return btn;
-      }
-    });
-    trackerMap.addControl(new FsCtl());
+    trackerMap.addControl(makeControlStack(trackerMap, "trackerMap"));
 
     trackerTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.9 }).addTo(trackerMap);
-    trackerMarker = L.circleMarker([0, 0], {
-      radius: 8, color: "#7c8cff", fillColor: "#7c8cff",
-      fillOpacity: 0.9, weight: 3
-    }).addTo(trackerMap);
+    trackerMarker = L.marker([0, 0], { icon: PIN_CURRENT }).addTo(trackerMap);
 
     setTimeout(() => trackerMap.invalidateSize(), 100);
     setTimeout(() => trackerMap.invalidateSize(), 500);
@@ -2349,6 +2445,10 @@
     initTrackerMap();
     trackerPoints = [];
     if (trackerTrail) trackerTrail.setLatLngs([]);
+    // Fly to current position immediately
+    if (currentLat != null && trackerMap) {
+      trackerMap.setView([currentLat, currentLon], 17);
+    }
     Android.startTrackingService();
     setTimeout(updateTrackingUI, 400);
   });
@@ -2371,8 +2471,11 @@
     trackerPoints.push(ll);
     trackerTrail.setLatLngs(trackerPoints);
     trackerMarker.setLatLng(ll);
-    if (trackerMap.getZoom() < 15) trackerMap.setView(ll, 16);
+    // Auto-follow: keep the marker centered as tracking progresses
+    if (trackerMap.getZoom() < 15) trackerMap.setView(ll, 17);
     else trackerMap.panTo(ll);
+    // Refresh header so satellites/signal update live
+    renderLocHeader();
   };
 
   window.onTrackingStopped = function () {
@@ -2438,36 +2541,21 @@
 
   /* ---------- Session detail ---------- */
   let sessionMap = null, sessionTrail = null;
+  let sessionStartMarker = null, sessionEndMarker = null;
 
   function initSessionMap() {
     if (sessionMap) { setTimeout(() => sessionMap.invalidateSize(), 60); return; }
     if (typeof L === "undefined") { setTimeout(initSessionMap, 150); return; }
     sessionMap = L.map("sessionMap", {
-      zoomControl: true, attributionControl: true
+      zoomControl: false,
+      attributionControl: true
     }).setView([0, 0], 2);
     const baseLayers = buildBaseLayers();
     baseLayers["OpenStreetMap"].addTo(sessionMap);
     L.control.layers(baseLayers, null, {
-      position: "topright", collapsed: false
+      position: "topright", collapsed: true
     }).addTo(sessionMap);
-    const FsCtl = L.Control.extend({
-      options: { position: "topright" },
-      onAdd: function () {
-        const btn = L.DomUtil.create("button", "fs-btn");
-        btn.innerHTML = "&#x26F6;";
-        btn.title = "Fullscreen";
-        L.DomEvent.disableClickPropagation(btn);
-        L.DomEvent.on(btn, "click", function (e) {
-          L.DomEvent.stop(e);
-          const el = $("sessionMap");
-          const isFs = el.classList.toggle("map-fullscreen");
-          btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
-          setTimeout(() => sessionMap && sessionMap.invalidateSize(), 120);
-        });
-        return btn;
-      }
-    });
-    sessionMap.addControl(new FsCtl());
+    sessionMap.addControl(makeControlStack(sessionMap, "sessionMap"));
     sessionTrail = L.polyline([], { color: "#4ade80", weight: 4, opacity: 0.9 }).addTo(sessionMap);
   }
 
@@ -2501,13 +2589,15 @@
     setTimeout(() => {
       initSessionMap();
       sessionMap.invalidateSize();
+      if (sessionStartMarker) { sessionMap.removeLayer(sessionStartMarker); sessionStartMarker = null; }
+      if (sessionEndMarker)   { sessionMap.removeLayer(sessionEndMarker);   sessionEndMarker = null; }
       const ll = points.map(p => [p[0], p[1]]);
       sessionTrail.setLatLngs(ll);
       if (ll.length) {
         sessionMap.fitBounds(ll, { padding: [40, 40], maxZoom: 17 });
-        L.circleMarker(ll[0], { radius: 6, color: "#4ade80", fillColor: "#4ade80", fillOpacity: 1 })
+        sessionStartMarker = L.marker(ll[0], { icon: PIN_START })
           .addTo(sessionMap).bindPopup("Start");
-        L.circleMarker(ll[ll.length - 1], { radius: 6, color: "#f87171", fillColor: "#f87171", fillOpacity: 1 })
+        sessionEndMarker = L.marker(ll[ll.length - 1], { icon: PIN_END })
           .addTo(sessionMap).bindPopup("End");
       }
     }, 150);
