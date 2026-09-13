@@ -487,6 +487,68 @@
     border-color: #8a2832;
     color: #fff;
   }
+
+  /* Location tab */
+  #trackerMap {
+    height: 380px; border-radius: 12px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--border);
+    margin-top: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  #sessionMap {
+    height: 380px; border-radius: 12px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--border);
+    margin-top: 12px;
+    position: relative;
+    z-index: 1;
+  }
+  /* Fullscreen — keeps Leaflet controls visible so user can exit */
+  #trackerMap.map-fullscreen,
+  #sessionMap.map-fullscreen {
+    position: fixed !important;
+    top: 0; left: 0; right: 0;
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+    height: auto !important;
+    margin: 0 !important;
+    border-radius: 0;
+    border: none;
+    z-index: 300;
+  }
+  /* The fullscreen toggle button in the corner */
+  .fs-btn {
+    background: #fff;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    width: 34px; height: 34px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    color: #333;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    font-family: inherit;
+  }
+  .fs-btn:active { background: #eee; }
+
+  .session-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .session-card:active { background: var(--card2); }
+  .session-card .s-left { flex: 1; min-width: 0; }
+  .session-card .s-title {
+    font-size: 14px; font-weight: 600; margin-bottom: 4px;
+  }
+  .session-card .s-sub {
+    font-size: 11.5px; color: var(--text-dim);
+    font-family: ui-monospace, monospace;
+  }
+  .session-card .s-chev { color: var(--text-faint); font-size: 22px; }
 </style>
 </head>
 <body>
@@ -640,19 +702,43 @@
   </section>
 
   <section id="tab-loc" class="tab">
-    <h1>Location</h1>
-    <h2>Last known fix</h2>
-    <div id="locInfo"></div>
-    <div class="btn-row">
-      <button class="btn" id="btnOpenMaps">Open in Google Maps</button>
-      <button class="btn btn-primary" id="btnLiveTrack">Start live tracking</button>
-      <button class="btn" id="btnRefreshMap">Refresh map</button>
+
+    <div id="locViewRoot">
+      <h1 id="locHeaderName">Location</h1>
+      <p class="subtitle" id="locHeaderCoords">Waiting for GPS fix…</p>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnLocate" style="flex:1;">&#128205; Locate</button>
+        <button class="btn" id="btnOpenGmaps" style="flex:1;" disabled>&#128506; Google Maps</button>
+      </div>
+
+      <details class="item" id="locMoreToggle" style="margin-top:12px;">
+        <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
+        <div class="body" id="locMoreBody" style="padding:0;"></div>
+      </details>
+
+      <h2>Tracker</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnTrackStart" style="flex:1;">&#9654; Start tracking my location</button>
+        <button class="btn btn-danger" id="btnTrackStop" style="flex:1; display:none;">&#9632; Stop tracking</button>
+      </div>
+      <div id="trackerMap"></div>
+
+      <h2>Tracking history <span id="sessionsCount" style="font-size:11px; color:var(--text-faint); font-weight:400; text-transform:none; letter-spacing:0;"></span></h2>
+      <div id="sessionsList"></div>
+      <button class="btn btn-danger" id="btnClearSessions" style="width:100%;">Clear all sessions</button>
     </div>
-    <h2>Live map<span class="live" id="liveIndicator" style="display:none;">live</span></h2>
-    <div id="locMap"></div>
-    <h2>History <span id="histCount" style="font-size:11px; color:var(--text-faint); font-weight:400; text-transform:none; letter-spacing:0;"></span></h2>
-    <div id="historyList"></div>
-    <button class="btn btn-danger" id="btnClearHistory">Clear history</button>
+
+    <div id="locViewSession" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="sessionBack">&#8592; Back</button>
+      </div>
+      <h1 id="sessionTitle">Session</h1>
+      <p class="subtitle" id="sessionSubtitle"></p>
+      <div id="sessionStats"></div>
+      <div id="sessionMap"></div>
+    </div>
+
   </section>
 
   <section id="tab-apps" class="tab">
@@ -2090,203 +2176,393 @@
   });
 
   /* ============ LOCATION ============ */
-  let currentLat = null, currentLon = null;
-  renderDL($("locInfo"), safeJSON(Android.getLocation(), {}));
-  const initialLoc = safeJSON(Android.getLocation(), {});
-  if (typeof initialLoc.Latitude === "number") {
-    currentLat = initialLoc.Latitude; currentLon = initialLoc.Longitude;
-    $("btnOpenMaps").disabled = false;
-  } else $("btnOpenMaps").disabled = true;
 
-  $("btnOpenMaps").addEventListener("click", () => {
+  /* ---------- Leaflet base layers ---------- */
+  const BASE_LAYERS = {
+    "OpenStreetMap": L ? null : null,   // filled lazily after L is ready
+    "Satellite": null,
+    "Google Hybrid": null
+  };
+
+  function buildBaseLayers() {
+    return {
+      "OpenStreetMap": L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { maxZoom: 19, attribution: "© OpenStreetMap" }),
+      "Satellite": L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 19, attribution: "© Esri" }),
+      "Google Hybrid": L.tileLayer(
+        "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+        { maxZoom: 20, attribution: "© Google" })
+    };
+  }
+
+  /* ---------- Header ---------- */
+  let currentLat = null, currentLon = null;
+  let locAutoTimer = null;
+
+  function renderLocHeader() {
+    const loc = safeJSON(Android.getLocationDetail(), {});
+    if (loc.error || typeof loc.Latitude !== "number") {
+      $("locHeaderName").textContent = "Location";
+      $("locHeaderCoords").textContent = loc.error || "Waiting for GPS fix…";
+      $("btnOpenGmaps").disabled = true;
+      $("locMoreBody").innerHTML = '<div class="kv-empty">No fix yet.</div>';
+      return;
+    }
+    currentLat = loc.Latitude;
+    currentLon = loc.Longitude;
+
+    $("locHeaderName").textContent = loc.Name || "Current location";
+    $("locHeaderCoords").textContent =
+      loc.Latitude.toFixed(5) + ", " + loc.Longitude.toFixed(5);
+    $("btnOpenGmaps").disabled = false;
+
+    // Signal bars
+    const bars = loc.SignalBars || 0;
+    const colors = ["#f87171", "#f5c76e", "#a3e635", "#4ade80"];
+    let barsSvg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
+    for (let i = 0; i < 4; i++) {
+      const h = 4 + i * 3;
+      barsSvg += '<rect x="' + (i * 5) + '" y="' + (16 - h) +
+        '" width="3.5" height="' + h + '" rx="1" fill="' +
+        (i < bars ? colors[Math.max(0, bars - 1)] : '#2c3346') + '"/>';
+    }
+    barsSvg += '</svg>';
+
+    const rows = {
+      "Latitude":   loc.Latitude,
+      "Longitude":  loc.Longitude,
+      "Accuracy":   (loc.Accuracy != null) ? loc.Accuracy.toFixed(1) + " m" : "—",
+      "Altitude":   (loc.Altitude != null) ? loc.Altitude.toFixed(1) + " m" : "—",
+      "Speed":      (loc.Speed != null) ? (loc.Speed * 3.6).toFixed(1) + " km/h" : "—",
+      "GPS signal": bars > 0 ? (bars + " / 4") : "no signal",
+      "Satellites": (loc.SatellitesUsed || 0) + " / " + (loc.Satellites || 0) + " in fix"
+    };
+    const body = $("locMoreBody");
+    body.innerHTML = "";
+    const tbl = document.createElement("table");
+    tbl.className = "kv-table";
+    for (const [k, v] of Object.entries(rows)) {
+      const tr = document.createElement("tr");
+      const tdL = document.createElement("td");
+      tdL.className = "kv-label"; tdL.textContent = k;
+      const tdV = document.createElement("td");
+      tdV.className = "kv-value";
+      if (k === "GPS signal") tdV.innerHTML = barsSvg + esc(String(v));
+      else tdV.textContent = v == null ? "—" : String(v);
+      tr.append(tdL, tdV);
+      tbl.appendChild(tr);
+    }
+    body.appendChild(tbl);
+  }
+
+  function startLocAutoRefresh() {
+    if (locAutoTimer) return;
+    locAutoTimer = setInterval(renderLocHeader, 3000);
+    renderLocHeader();
+  }
+  function stopLocAutoRefresh() {
+    if (locAutoTimer) { clearInterval(locAutoTimer); locAutoTimer = null; }
+  }
+
+  $("btnLocate").addEventListener("click", () => {
+    renderLocHeader();
+    if (trackerMap && currentLat != null) {
+      trackerMap.setView([currentLat, currentLon], Math.max(trackerMap.getZoom() || 16, 16));
+    }
+  });
+
+  $("btnOpenGmaps").addEventListener("click", () => {
     if (currentLat == null) return;
     openExternal("https://www.google.com/maps?q=" + currentLat + "," + currentLon);
   });
 
-  window.onLocationUpdated = loc => {
-    renderDL($("locInfo"), loc);
-    if (typeof loc.Latitude === "number") {
-      currentLat = loc.Latitude; currentLon = loc.Longitude;
-      $("btnOpenMaps").disabled = false;
-    }
-  };
-  window.onLocationStateChanged = on => {
-  
-  /* ============ OUI loader ============ */
-  (function watchOui() {
-    if (typeof Android.isOuiReady !== "function") {
-      $("ouiLoader").style.display = "none";
+  /* ---------- Tracker map ---------- */
+  let trackerMap = null, trackerTrail = null, trackerMarker = null;
+  let trackerPoints = [];
+  let trackerLayerCtl = null;
+
+  function initTrackerMap() {
+    if (trackerMap) {
+      setTimeout(() => trackerMap.invalidateSize(), 60);
       return;
     }
-    function check() {
-      try {
-        if (Android.isOuiReady()) {
-          const el = $("ouiLoader");
-          if (el && el.style.display !== "none") {
-            el.classList.add("done");
-            $("ouiLoaderText").textContent = "Router manufacturer database ready.";
-            setTimeout(() => { el.style.display = "none"; }, 2000);
-          }
-          return;
-        }
-      } catch (e) {}
-      $("ouiLoader").style.display = "flex";
-      setTimeout(check, 1500);
-    }
-    check();
-  })();
+    if (typeof L === "undefined") { setTimeout(initTrackerMap, 150); return; }
 
+    trackerMap = L.map("trackerMap", {
+      zoomControl: true,
+      attributionControl: true
+    }).setView([0, 0], 2);
 
-  /* Called by Java after permissions are granted or on resume —
-     refreshes data Java doesn't push directly. */
-  window.onRefreshAll = function () {
-    try { refreshBtAdapter(); } catch (e) {}
-    // Re-render current WiFi tab if visible
-    try {
-      const info = safeJSON(Android.getWifiInfo(), {});
-      if (info && !info.error) {
-        renderDL($("wifiInfoPrimary"), buildWifiPrimary(info));
-        const moreEl = $("wifiInfoMore");
-        moreEl.innerHTML = "";
-        const wrap = document.createElement("div");
-        moreEl.appendChild(wrap);
-        renderDL(wrap, buildWifiMore(info));
+    const baseLayers = buildBaseLayers();
+    baseLayers["OpenStreetMap"].addTo(trackerMap);
+
+    // Native Leaflet layer switcher
+    L.control.layers(baseLayers, null, {
+      position: "topright", collapsed: false
+    }).addTo(trackerMap);
+
+    // Custom fullscreen button (topright, above layer control)
+    const FsCtl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd: function () {
+        const btn = L.DomUtil.create("button", "fs-btn");
+        btn.innerHTML = "&#x26F6;";
+        btn.title = "Fullscreen";
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, "click", function (e) {
+          L.DomEvent.stop(e);
+          toggleTrackerFullscreen(btn);
+        });
+        return btn;
       }
-    } catch (e) {}
-    // Re-render bonded devices list
-    try {
-      const bonded = safeJSON(Android.getBluetoothBondedDevices(), []);
-      if (typeof renderBonded === "function") renderBonded(bonded);
-    } catch (e) {}
-  };
+    });
+    trackerMap.addControl(new FsCtl());
 
-  refreshPermissionBanner();
-    window.onLocationUpdated(safeJSON(Android.getLocation(), {}));
-  };
+    trackerTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.9 }).addTo(trackerMap);
+    trackerMarker = L.circleMarker([0, 0], {
+      radius: 8, color: "#7c8cff", fillColor: "#7c8cff",
+      fillOpacity: 0.9, weight: 3
+    }).addTo(trackerMap);
 
-  let locMap = null, locMarker = null, locTrail = null, locTrailPoints = [];
-  let locMapReady = false;
+    setTimeout(() => trackerMap.invalidateSize(), 100);
+    setTimeout(() => trackerMap.invalidateSize(), 500);
 
-  function initLocMap() {
-    if (locMapReady) { if (locMap) setTimeout(() => locMap.invalidateSize(), 40); return; }
-    if (typeof L === "undefined") { setTimeout(initLocMap, 150); return; }
-    locMapReady = true;
-    locMap = L.map("locMap", { zoomControl: true }).setView([0, 0], 2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(locMap);
-    locTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.85 }).addTo(locMap);
-    locMarker = L.circleMarker([0, 0], { radius: 9, color: "#7c8cff",
-      fillColor: "#7c8cff", fillOpacity: 0.9, weight: 3 }).addTo(locMap);
-    setTimeout(() => locMap.invalidateSize(), 80);
-    setTimeout(() => locMap.invalidateSize(), 400);
-    setTimeout(() => locMap.invalidateSize(), 1200);
-    drawLocHistory(safeJSON(Android.getLocationHistory(), []));
+    // Load active session if any
+    const active = safeJSON(Android.getActiveSession(), null);
+    if (active && active.points && active.points.length) {
+      trackerPoints = active.points.map(p => [p[0], p[1]]);
+      trackerTrail.setLatLngs(trackerPoints);
+      const last = trackerPoints[trackerPoints.length - 1];
+      trackerMarker.setLatLng(last);
+      trackerMap.setView(last, 16);
+    } else {
+      const loc = safeJSON(Android.getLocationDetail(), {});
+      if (loc && typeof loc.Latitude === "number") {
+        const ll = [loc.Latitude, loc.Longitude];
+        trackerMarker.setLatLng(ll);
+        trackerMap.setView(ll, 16);
+      }
+    }
   }
 
-  function drawLocHistory(hist) {
-    if (!locMap) return;
-    locTrailPoints = hist.map(p => [p.lat, p.lon]);
-    locTrail.setLatLngs(locTrailPoints);
-    $("histCount").textContent = hist.length ? "(" + hist.length + " points)" : "";
-    if (!hist.length) {
-      $("historyList").innerHTML = '<div class="empty">No saved points yet.</div>';
+  function toggleTrackerFullscreen(btn) {
+    const el = $("trackerMap");
+    const isFs = el.classList.toggle("map-fullscreen");
+    btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+    btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
+    setTimeout(() => trackerMap && trackerMap.invalidateSize(), 120);
+  }
+
+  /* ---------- Tracking controls ---------- */
+  function updateTrackingUI() {
+    let running = false;
+    try { running = Android.isTrackingActive(); } catch (e) {}
+    $("btnTrackStart").style.display = running ? "none" : "";
+    $("btnTrackStop").style.display = running ? "" : "none";
+  }
+
+  $("btnTrackStart").addEventListener("click", () => {
+    initTrackerMap();
+    trackerPoints = [];
+    if (trackerTrail) trackerTrail.setLatLngs([]);
+    Android.startTrackingService();
+    setTimeout(updateTrackingUI, 400);
+  });
+
+  $("btnTrackStop").addEventListener("click", async () => {
+    const ok = await showConfirm({
+      title: "Stop tracking?",
+      message: "The current session will be saved to history.",
+      confirmText: "Stop",
+      danger: true
+    });
+    if (!ok) return;
+    Android.stopTrackingService();
+    setTimeout(() => { updateTrackingUI(); renderSessionsList(); }, 600);
+  });
+
+  window.onTrackingPoint = function (p) {
+    if (!trackerMap) initTrackerMap();
+    const ll = [p.lat, p.lon];
+    trackerPoints.push(ll);
+    trackerTrail.setLatLngs(trackerPoints);
+    trackerMarker.setLatLng(ll);
+    if (trackerMap.getZoom() < 15) trackerMap.setView(ll, 16);
+    else trackerMap.panTo(ll);
+  };
+
+  window.onTrackingStopped = function () {
+    updateTrackingUI();
+    renderSessionsList();
+  };
+
+  /* ---------- Sessions list ---------- */
+  function fmtDuration(ms) {
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return h + "h " + m + "m";
+    if (m > 0) return m + "m " + sec + "s";
+    return sec + "s";
+  }
+  function fmtDistance(m) {
+    if (m < 1000) return Math.round(m) + " m";
+    return (m / 1000).toFixed(2) + " km";
+  }
+
+  function renderSessionsList() {
+    const arr = safeJSON(Android.getSessions(), []);
+    $("sessionsCount").textContent = arr.length
+      ? "(" + arr.length + " session" + (arr.length === 1 ? "" : "s") + ")"
+      : "";
+    if (!arr.length) {
+      $("sessionsList").innerHTML =
+        '<div class="empty">No sessions yet. Tap "Start tracking my location" to record one.</div>';
       return;
     }
-    const recent = hist.slice(-20).reverse();
-    $("historyList").innerHTML = recent.map(p =>
-      '<div class="hist-item">' +
-      '<a href="#" data-lat="' + p.lat + '" data-lon="' + p.lon + '">' +
-      p.lat.toFixed(5) + ", " + p.lon.toFixed(5) + '</a>' +
-      "  ±" + Math.round(p.acc || 0) + "m · " + new Date(p.t).toLocaleString() + '</div>'
-    ).join("");
-    $("historyList").querySelectorAll("a").forEach(a => {
-      a.addEventListener("click", e => {
-        e.preventDefault();
-        openExternal("https://www.google.com/maps?q=" + a.dataset.lat + "," + a.dataset.lon);
-      });
+    const sorted = arr.slice().sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+    $("sessionsList").innerHTML = sorted.map(sess => {
+      const start = sess.startTime ? new Date(sess.startTime).toLocaleString() : "—";
+      const dur = fmtDuration((sess.endTime || 0) - (sess.startTime || 0));
+      const dist = fmtDistance(sess.distanceMeters || 0);
+      return '<div class="session-card" data-id="' + esc(sess.id) + '">' +
+        '<div class="s-left">' +
+          '<div class="s-title">' + esc(start) + '</div>' +
+          '<div class="s-sub">' + dur + '  ·  ' + dist +
+            '  ·  ' + (sess.points ? sess.points.length : 0) + ' pts</div>' +
+        '</div>' +
+        '<div class="s-chev">&#8250;</div>' +
+      '</div>';
+    }).join("");
+    $("sessionsList").querySelectorAll(".session-card").forEach(c => {
+      c.addEventListener("click", () => openSession(c.dataset.id));
     });
   }
 
-  $("btnRefreshMap").addEventListener("click", () => {
-    initLocMap();
-    setTimeout(() => {
-      if (locMap) locMap.invalidateSize();
-      drawLocHistory(safeJSON(Android.getLocationHistory(), []));
-    }, 100);
-  });
-
-  let tracking = false;
-  $("btnLiveTrack").addEventListener("click", () => {
-    if (tracking) Android.stopLiveTracking();
-    else {
-      initLocMap();
-      setTimeout(() => { if (locMap) locMap.invalidateSize(); }, 100);
-      Android.startLiveTracking();
-    }
-  });
-
-  window.onLiveLocationStarted = () => {
-    tracking = true;
-    const b = $("btnLiveTrack");
-    b.textContent = "Stop live tracking";
-    b.classList.remove("btn-primary"); b.classList.add("btn-danger");
-    $("liveIndicator").style.display = "inline";
-  };
-  window.onLiveLocationStopped = () => {
-    tracking = false;
-    const b = $("btnLiveTrack");
-    b.textContent = "Start live tracking";
-    b.classList.remove("btn-danger"); b.classList.add("btn-primary");
-    $("liveIndicator").style.display = "none";
-  };
-  window.onLiveLocationError = msg => {
-    tracking = false;
-    const b = $("btnLiveTrack");
-    b.textContent = "Start live tracking";
-    b.classList.remove("btn-danger"); b.classList.add("btn-primary");
-    $("liveIndicator").style.display = "none";
-    alert("Live tracking: " + msg);
-  };
-  window.onLiveLocationUpdate = loc => {
-    initLocMap();
-    if (!locMap) return;
-    locMarker.setLatLng([loc.Latitude, loc.Longitude]);
-    locTrailPoints.push([loc.Latitude, loc.Longitude]);
-    locTrail.setLatLngs(locTrailPoints);
-    locMap.setView([loc.Latitude, loc.Longitude], Math.max(locMap.getZoom() || 16, 16));
-    currentLat = loc.Latitude; currentLon = loc.Longitude;
-    renderDL($("locInfo"), {
-      Latitude: loc.Latitude, Longitude: loc.Longitude,
-      Accuracy: loc.Accuracy, Altitude: loc.Altitude, Speed: loc.Speed,
-      MapsUrl: "https://www.google.com/maps?q=" + loc.Latitude + "," + loc.Longitude
-    });
-    $("btnOpenMaps").disabled = false;
-    if (locTrailPoints.length % 3 === 0)
-      drawLocHistory(safeJSON(Android.getLocationHistory(), []));
-  };
-
-  $("btnClearHistory").addEventListener("click", async () => {
+  $("btnClearSessions").addEventListener("click", async () => {
     const ok = await showConfirm({
-      title: "Clear location history?",
-      message: "Every saved location point will be permanently deleted.\n\nThis cannot be undone.",
+      title: "Clear all sessions?",
+      message: "Every recorded tracking session will be permanently deleted.\n\nThis cannot be undone.",
       confirmText: "Delete",
       danger: true
     });
     if (!ok) return;
-    Android.clearLocationHistory();
-    locTrailPoints = [];
-    if (locTrail) locTrail.setLatLngs([]);
-    drawLocHistory([]);
+    Android.clearSessions();
+    renderSessionsList();
   });
 
-  /* Lazy map init when Location tab is first opened */
-  let locMapInited = false;
+  /* ---------- Session detail ---------- */
+  let sessionMap = null, sessionTrail = null;
+
+  function initSessionMap() {
+    if (sessionMap) { setTimeout(() => sessionMap.invalidateSize(), 60); return; }
+    if (typeof L === "undefined") { setTimeout(initSessionMap, 150); return; }
+    sessionMap = L.map("sessionMap", {
+      zoomControl: true, attributionControl: true
+    }).setView([0, 0], 2);
+    const baseLayers = buildBaseLayers();
+    baseLayers["OpenStreetMap"].addTo(sessionMap);
+    L.control.layers(baseLayers, null, {
+      position: "topright", collapsed: false
+    }).addTo(sessionMap);
+
+    const FsCtl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd: function () {
+        const btn = L.DomUtil.create("button", "fs-btn");
+        btn.innerHTML = "&#x26F6;";
+        btn.title = "Fullscreen";
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, "click", function (e) {
+          L.DomEvent.stop(e);
+          const el = $("sessionMap");
+          const isFs = el.classList.toggle("map-fullscreen");
+          btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+          setTimeout(() => sessionMap && sessionMap.invalidateSize(), 120);
+        });
+        return btn;
+      }
+    });
+    sessionMap.addControl(new FsCtl());
+
+    sessionTrail = L.polyline([], { color: "#4ade80", weight: 4, opacity: 0.9 }).addTo(sessionMap);
+  }
+
+  function openSession(id) {
+    const sess = safeJSON(Android.getSessionDetail(id), null);
+    if (!sess) { alert("Session not found."); return; }
+    const points = sess.points || [];
+    const start = new Date(sess.startTime).toLocaleString();
+    const end = sess.endTime ? new Date(sess.endTime).toLocaleString() : "—";
+    const dur = fmtDuration((sess.endTime || 0) - (sess.startTime || 0));
+    const dist = fmtDistance(sess.distanceMeters || 0);
+    const maxSpd = sess.maxSpeed ? (sess.maxSpeed * 3.6).toFixed(1) + " km/h" : "—";
+    const avgSpd = sess.avgSpeed ? (sess.avgSpeed * 3.6).toFixed(1) + " km/h" : "—";
+
+    $("sessionTitle").textContent = "Session " + id.slice(-6);
+    $("sessionSubtitle").textContent = start;
+
+    renderDL($("sessionStats"), {
+      "Start time": start,
+      "End time":   end,
+      "Duration":   dur,
+      "Distance":   dist,
+      "Max speed":  maxSpd,
+      "Avg speed":  avgSpd,
+      "Points":     points.length
+    });
+
+    $("locViewRoot").style.display = "none";
+    $("locViewSession").style.display = "";
+
+    setTimeout(() => {
+      initSessionMap();
+      sessionMap.invalidateSize();
+      const ll = points.map(p => [p[0], p[1]]);
+      sessionTrail.setLatLngs(ll);
+      if (ll.length) {
+        sessionMap.fitBounds(ll, { padding: [40, 40], maxZoom: 17 });
+        L.circleMarker(ll[0], { radius: 6, color: "#4ade80", fillColor: "#4ade80", fillOpacity: 1 })
+          .addTo(sessionMap).bindPopup("Start");
+        L.circleMarker(ll[ll.length - 1], { radius: 6, color: "#f87171", fillColor: "#f87171", fillOpacity: 1 })
+          .addTo(sessionMap).bindPopup("End");
+      }
+    }, 150);
+  }
+
+  $("sessionBack").addEventListener("click", () => {
+    $("locViewRoot").style.display = "";
+    $("locViewSession").style.display = "none";
+    if (sessionMap) setTimeout(() => sessionMap.invalidateSize(), 60);
+  });
+
+  /* ---------- Tab lifecycle ---------- */
+  let locTabInited = false;
   tabs.forEach(b => b.addEventListener("click", () => {
-    if (b.dataset.tab === "loc" && !locMapInited) {
-      locMapInited = true;
-      setTimeout(initLocMap, 150);
+    if (b.dataset.tab === "loc") {
+      if (!locTabInited) {
+        locTabInited = true;
+        setTimeout(initTrackerMap, 150);
+      } else if (trackerMap) {
+        setTimeout(() => trackerMap.invalidateSize(), 60);
+      }
+      startLocAutoRefresh();
+      renderSessionsList();
+      updateTrackingUI();
+    } else {
+      stopLocAutoRefresh();
     }
   }));
+
+  /* Legacy no-op handlers */
+  window.onLiveLocationStarted = function () {};
+  window.onLiveLocationStopped = function () {};
+  window.onLiveLocationError = function () {};
+  window.onLiveLocationUpdate = function () {};
 
   /* ============ INSTALLED APPS ============ */
   let appsCache = null, currentFilter = "all", appsTimeout = null;

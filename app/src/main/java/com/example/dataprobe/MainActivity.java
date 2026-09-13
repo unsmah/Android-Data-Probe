@@ -20,6 +20,8 @@ import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
+import android.location.Geocoder;
+import android.location.GnssStatus;
 import android.location.LocationManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -68,6 +70,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,6 +97,14 @@ public class MainActivity extends AppCompatActivity {
     private boolean liveWifiScanning = false;
     private final Map<String, JSONObject> btSeen = new HashMap<>();
     private final Handler scanHandler = new Handler(Looper.getMainLooper());
+    private GnssStatus.Callback gnssCallback;
+    private volatile int gnssSatellites = 0;
+    private volatile int gnssUsedInFix = 0;
+    private volatile float gnssSnr = 0f;
+    private BroadcastReceiver trackingReceiver;
+    private String cachedGeoName = null;
+    private long cachedGeoTime = 0;
+    private double cachedGeoLat = 0, cachedGeoLon = 0;
 
     /* OUI cache: prefix (no colons, uppercase) -> manufacturer */
     private final ConcurrentHashMap<String, String> ouiMap = new ConcurrentHashMap<>();
@@ -343,6 +354,9 @@ public class MainActivity extends AppCompatActivity {
             perms.add(Manifest.permission.BLUETOOTH_CONNECT);
             perms.add(Manifest.permission.BLUETOOTH_SCAN);
         }
+        if (Build.VERSION.SDK_INT >= 33) {
+            perms.add("android.permission.POST_NOTIFICATIONS");
+        }
         return perms;
     }
 
@@ -387,6 +401,15 @@ public class MainActivity extends AppCompatActivity {
         new Thread(this::recordBondedDevices, "bt-bonded").start();
         pushAllData();
         scanHandler.postDelayed(MainActivity.this::pushAllData, 800);
+        startGnssUpdates();
+        registerTrackingReceiver();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopGnssUpdates();
+        unregisterTrackingReceiver();
     }
 
     private void pushPermissionStatus() {
@@ -1530,6 +1553,118 @@ public class MainActivity extends AppCompatActivity {
         private String escape(String s) {
             return s == null ? "" : s.replace("\\", "\\\\").replace("'", "\\'");
         }
+    }
+
+
+    /* ================= GNSS ================= */
+
+    private void startGnssUpdates() {
+        if (gnssCallback != null) return;
+        try {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) return;
+            gnssCallback = new GnssStatus.Callback() {
+                @Override
+                public void onSatelliteStatusChanged(@NonNull GnssStatus status) {
+                    int total = status.getSatelliteCount();
+                    int used = 0;
+                    float totalSnr = 0f;
+                    int snrCount = 0;
+                    for (int i = 0; i < total; i++) {
+                        if (status.usedInFix(i)) used++;
+                        float sv = status.getCn0DbHz(i);
+                        if (sv > 0) { totalSnr += sv; snrCount++; }
+                    }
+                    gnssSatellites = total;
+                    gnssUsedInFix = used;
+                    gnssSnr = snrCount > 0 ? totalSnr / snrCount : 0f;
+                }
+            };
+            locationManager.registerGnssStatusCallback(gnssCallback, scanHandler);
+        } catch (Exception ignored) {}
+    }
+
+    private void stopGnssUpdates() {
+        if (gnssCallback == null) return;
+        try { locationManager.unregisterGnssStatusCallback(gnssCallback); } catch (Exception ignored) {}
+        gnssCallback = null;
+    }
+
+    /* ================= Reverse geocoding ================= */
+
+    private String reverseGeocode(double lat, double lon) {
+        long now = System.currentTimeMillis();
+        if (cachedGeoName != null && now - cachedGeoTime < 300000
+                && Math.abs(lat - cachedGeoLat) < 0.0005
+                && Math.abs(lon - cachedGeoLon) < 0.0005) {
+            return cachedGeoName;
+        }
+        try {
+            Geocoder gc = new Geocoder(this, Locale.getDefault());
+            java.util.List<android.location.Address> list = gc.getFromLocation(lat, lon, 1);
+            if (list != null && !list.isEmpty()) {
+                android.location.Address a = list.get(0);
+                StringBuilder sb = new StringBuilder();
+                if (a.getLocality() != null) sb.append(a.getLocality());
+                if (a.getSubAdminArea() != null && !a.getSubAdminArea().equals(a.getLocality())) {
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(a.getSubAdminArea());
+                }
+                if (a.getAdminArea() != null) {
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(a.getAdminArea());
+                }
+                if (a.getCountryName() != null) {
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(a.getCountryName());
+                }
+                String out = sb.length() > 0 ? sb.toString() : null;
+                if (out != null) {
+                    cachedGeoName = out;
+                    cachedGeoTime = now;
+                    cachedGeoLat = lat;
+                    cachedGeoLon = lon;
+                    return out;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /* ================= Tracking receiver ================= */
+
+    private void registerTrackingReceiver() {
+        if (trackingReceiver != null) return;
+        trackingReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                String action = intent.getAction();
+                if (LocationTrackingService.ACTION_UPDATE.equals(action)) {
+                    String point = intent.getStringExtra("point");
+                    if (point != null) {
+                        final String js = "window.onTrackingPoint(" + point + ")";
+                        webView.post(() -> webView.evaluateJavascript(js, null));
+                    }
+                } else if (LocationTrackingService.ACTION_STOPPED.equals(action)) {
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.onTrackingStopped()", null));
+                }
+            }
+        };
+        IntentFilter f = new IntentFilter();
+        f.addAction(LocationTrackingService.ACTION_UPDATE);
+        f.addAction(LocationTrackingService.ACTION_STOPPED);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(trackingReceiver, f, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(trackingReceiver, f);
+        }
+    }
+
+    private void unregisterTrackingReceiver() {
+        if (trackingReceiver == null) return;
+        try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) {}
+        trackingReceiver = null;
     }
 
     /* ================= WiFi scan internals ================= */
