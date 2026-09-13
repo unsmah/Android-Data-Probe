@@ -371,9 +371,12 @@ public class MainActivity extends AppCompatActivity {
         // Push repeatedly — the adapter and bonded list need a moment
         // after the permission dialog is dismissed
         pushAllData();
-        scanHandler.postDelayed(MainActivity.this::pushAllData, 500);
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 300);
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 800);
         scanHandler.postDelayed(MainActivity.this::pushAllData, 1500);
         scanHandler.postDelayed(MainActivity.this::pushAllData, 3000);
+        scanHandler.postDelayed(MainActivity.this::pushBondedDevices, 5000);
+        scanHandler.postDelayed(MainActivity.this::pushBondedDevices, 8000);
     }
 
     @Override

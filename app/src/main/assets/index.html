@@ -1485,21 +1485,43 @@
   function refreshBtAdapter() {
     try {
       const name = Android.getBluetoothAdapterName();
-      const rows = {
+      const st = safeJSON(Android.getPermissionStatus(), {});
+      renderDL($("btAdapterInfo"), {
         "Device name": name || "(not available)",
-        "Available": (Android.getPermissionStatus && safeJSON(Android.getPermissionStatus(), {}).bluetoothEnabled) ? "Yes" : "No"
-      };
-      renderDL($("btAdapterInfo"), rows);
+        "Available": st.bluetoothEnabled ? "Yes" : "No"
+      });
     } catch (e) {
       renderDL($("btAdapterInfo"), { "Device name": "unavailable" });
     }
+    // Adapter name becoming available means permissions are granted —
+    // so the bonded list is readable now too. Always refresh both.
+    try {
+      const bonded = safeJSON(Android.getBluetoothBondedDevices(), []);
+      if (typeof renderBonded === "function") renderBonded(bonded);
+    } catch (e) {}
   }
   refreshBtAdapter();
 
 
   function renderBonded(list) {
-    $("btPaired").innerHTML = list.length
-      ? list.map(d => {
+    // Show state-aware message when list is empty
+    if (!list.length) {
+      const st = safeJSON(Android.getPermissionStatus(), {});
+      if (!st.bluetoothEnabled) {
+        $("btPaired").innerHTML =
+          '<div class="empty">Bluetooth is off. Turn it on to see paired devices.</div>';
+        return;
+      }
+      if (!st.allGranted) {
+        $("btPaired").innerHTML =
+          '<div class="loading">Waiting for permissions…</div>';
+        return;
+      }
+      $("btPaired").innerHTML =
+        '<div class="empty">No paired devices.</div>';
+      return;
+    }
+    $("btPaired").innerHTML = list.map(d => {
           const cat = d.Category || "bluetooth";
           return '<details class="item">' +
             '<summary>' +
@@ -1520,8 +1542,7 @@
               '</table>' +
             '</div>' +
           '</details>';
-        }).join("")
-      : '<div class="empty">No paired devices.</div>';
+        }).join("");
   }
   renderBonded(safeJSON(Android.getBluetoothBondedDevices(), []));
 
@@ -2159,6 +2180,40 @@
       }
     } catch (e) {}
   })();
+
+  /* ---------- Robust callback overrides ----------
+     Defined at the very end so they always win.
+     Guards against stale function references and any first-launch
+     timing issues. */
+  window.onBondedDevicesUpdated = function (list) {
+    try { renderBonded(Array.isArray(list) ? list : []); }
+    catch (e) { console.error("onBondedDevicesUpdated:", e); }
+  };
+  window.onWifiInfoUpdated = function (info) {
+    try {
+      if (typeof buildWifiPrimary !== "function") return;
+      const el = $("wifiInfoPrimary");
+      if (el) renderDL(el, buildWifiPrimary(info));
+      const moreEl = $("wifiInfoMore");
+      if (moreEl) {
+        moreEl.innerHTML = "";
+        const wrap = document.createElement("div");
+        moreEl.appendChild(wrap);
+        renderDL(wrap, buildWifiMore(info));
+      }
+    } catch (e) { console.error("onWifiInfoUpdated:", e); }
+  };
+  window.onLocationUpdated = function (loc) {
+    try {
+      const el = $("locInfo");
+      if (el) renderDL(el, loc);
+      if (loc && typeof loc.Latitude === "number") {
+        currentLat = loc.Latitude; currentLon = loc.Longitude;
+        const btn = $("btnOpenMaps");
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) { console.error("onLocationUpdated:", e); }
+  };
 
   refreshPermissionBanner();
 
