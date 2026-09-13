@@ -2177,13 +2177,6 @@
 
   /* ============ LOCATION ============ */
 
-  /* ---------- Leaflet base layers ---------- */
-  const BASE_LAYERS = {
-    "OpenStreetMap": L ? null : null,   // filled lazily after L is ready
-    "Satellite": null,
-    "Google Hybrid": null
-  };
-
   function buildBaseLayers() {
     return {
       "OpenStreetMap": L.tileLayer(
@@ -2219,7 +2212,6 @@
       loc.Latitude.toFixed(5) + ", " + loc.Longitude.toFixed(5);
     $("btnOpenGmaps").disabled = false;
 
-    // Signal bars
     const bars = loc.SignalBars || 0;
     const colors = ["#f87171", "#f5c76e", "#a3e635", "#4ade80"];
     let barsSvg = '<svg width="22" height="16" viewBox="0 0 22 16" style="vertical-align:middle;margin-right:6px;">';
@@ -2282,7 +2274,6 @@
   /* ---------- Tracker map ---------- */
   let trackerMap = null, trackerTrail = null, trackerMarker = null;
   let trackerPoints = [];
-  let trackerLayerCtl = null;
 
   function initTrackerMap() {
     if (trackerMap) {
@@ -2292,19 +2283,15 @@
     if (typeof L === "undefined") { setTimeout(initTrackerMap, 150); return; }
 
     trackerMap = L.map("trackerMap", {
-      zoomControl: true,
-      attributionControl: true
+      zoomControl: true, attributionControl: true
     }).setView([0, 0], 2);
 
     const baseLayers = buildBaseLayers();
     baseLayers["OpenStreetMap"].addTo(trackerMap);
-
-    // Native Leaflet layer switcher
     L.control.layers(baseLayers, null, {
       position: "topright", collapsed: false
     }).addTo(trackerMap);
 
-    // Custom fullscreen button (topright, above layer control)
     const FsCtl = L.Control.extend({
       options: { position: "topright" },
       onAdd: function () {
@@ -2314,7 +2301,11 @@
         L.DomEvent.disableClickPropagation(btn);
         L.DomEvent.on(btn, "click", function (e) {
           L.DomEvent.stop(e);
-          toggleTrackerFullscreen(btn);
+          const el = $("trackerMap");
+          const isFs = el.classList.toggle("map-fullscreen");
+          btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+          btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
+          setTimeout(() => trackerMap && trackerMap.invalidateSize(), 120);
         });
         return btn;
       }
@@ -2330,7 +2321,6 @@
     setTimeout(() => trackerMap.invalidateSize(), 100);
     setTimeout(() => trackerMap.invalidateSize(), 500);
 
-    // Load active session if any
     const active = safeJSON(Android.getActiveSession(), null);
     if (active && active.points && active.points.length) {
       trackerPoints = active.points.map(p => [p[0], p[1]]);
@@ -2348,15 +2338,6 @@
     }
   }
 
-  function toggleTrackerFullscreen(btn) {
-    const el = $("trackerMap");
-    const isFs = el.classList.toggle("map-fullscreen");
-    btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
-    btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
-    setTimeout(() => trackerMap && trackerMap.invalidateSize(), 120);
-  }
-
-  /* ---------- Tracking controls ---------- */
   function updateTrackingUI() {
     let running = false;
     try { running = Android.isTrackingActive(); } catch (e) {}
@@ -2469,7 +2450,6 @@
     L.control.layers(baseLayers, null, {
       position: "topright", collapsed: false
     }).addTo(sessionMap);
-
     const FsCtl = L.Control.extend({
       options: { position: "topright" },
       onAdd: function () {
@@ -2488,7 +2468,6 @@
       }
     });
     sessionMap.addControl(new FsCtl());
-
     sessionTrail = L.polyline([], { color: "#4ade80", weight: 4, opacity: 0.9 }).addTo(sessionMap);
   }
 
@@ -2558,7 +2537,6 @@
     }
   }));
 
-  /* Legacy no-op handlers */
   window.onLiveLocationStarted = function () {};
   window.onLiveLocationStopped = function () {};
   window.onLiveLocationError = function () {};

@@ -1543,6 +1543,106 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { return null; }
         }
 
+
+        /* ===== Location header ===== */
+
+        @JavascriptInterface
+        public String getLocationDetail() {
+            JSONObject o = new JSONObject();
+            try {
+                Location loc = getLastLocationQuick();
+                if (loc == null) {
+                    o.put("error", "No fix yet. Move to an open area.");
+                    return o.toString();
+                }
+                o.put("Latitude", loc.getLatitude());
+                o.put("Longitude", loc.getLongitude());
+                o.put("Accuracy", loc.getAccuracy());
+                o.put("Altitude", loc.getAltitude());
+                o.put("Speed", loc.getSpeed());
+                o.put("Satellites", gnssSatellites);
+                o.put("SatellitesUsed", gnssUsedInFix);
+                o.put("Snr", gnssSnr);
+                int bars = 0;
+                if (gnssSnr >= 35) bars = 4;
+                else if (gnssSnr >= 25) bars = 3;
+                else if (gnssSnr >= 15) bars = 2;
+                else if (gnssSnr > 0) bars = 1;
+                o.put("SignalBars", bars);
+                String name = reverseGeocode(loc.getLatitude(), loc.getLongitude());
+                if (name != null) o.put("Name", name);
+            } catch (Exception e) {
+                try { o.put("error", e.getMessage()); } catch (Exception ignored) {}
+            }
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public void startTrackingService() {
+            try {
+                Intent i = new Intent(MainActivity.this, LocationTrackingService.class);
+                i.setAction(LocationTrackingService.ACTION_START);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+                else startService(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void stopTrackingService() {
+            try {
+                Intent i = new Intent(MainActivity.this, LocationTrackingService.class);
+                i.setAction(LocationTrackingService.ACTION_STOP);
+                startService(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public boolean isTrackingActive() {
+            try { return LocationTrackingService.isRunning; }
+            catch (Exception e) { return false; }
+        }
+
+        @JavascriptInterface
+        public String getActiveSession() {
+            try {
+                File f = new File(getFilesDir(), "tracking_active.json");
+                if (!f.exists()) return "null";
+                return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            } catch (Exception e) { return "null"; }
+        }
+
+        @JavascriptInterface
+        public String getSessions() {
+            try {
+                File f = new File(getFilesDir(), "tracking_sessions.json");
+                if (!f.exists()) return "[]";
+                return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            } catch (Exception e) { return "[]"; }
+        }
+
+        @JavascriptInterface
+        public String getSessionDetail(String id) {
+            try {
+                File f = new File(getFilesDir(), "tracking_sessions.json");
+                if (!f.exists()) return "null";
+                JSONArray arr = new JSONArray(new String(
+                    Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o != null && id.equals(o.optString("id"))) return o.toString();
+                }
+            } catch (Exception ignored) {}
+            return "null";
+        }
+
+        @JavascriptInterface
+        public void clearSessions() {
+            try {
+                new File(getFilesDir(), "tracking_sessions.json").delete();
+                new File(getFilesDir(), "tracking_active.json").delete();
+            } catch (Exception ignored) {}
+        }
+
         private String intToIp(int ip) {
             return (ip & 0xFF) + "." + ((ip >> 8) & 0xFF) + "." +
                    ((ip >> 16) & 0xFF) + "." + ((ip >> 24) & 0xFF);
