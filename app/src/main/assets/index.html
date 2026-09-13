@@ -410,6 +410,83 @@
     letter-spacing: 0.04em;
     margin-left: 6px;
   }
+
+  /* ============ Modal ============ */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: modalFadeIn 0.18s ease;
+  }
+  .modal-overlay.show { display: flex; }
+  @keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .modal-box {
+    background: var(--card);
+    border: 1px solid var(--border-hi);
+    border-radius: 16px;
+    padding: 22px 22px 18px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    animation: modalIn 0.22s cubic-bezier(.2, .9, .3, 1.2);
+  }
+  @keyframes modalIn {
+    from { transform: scale(0.94) translateY(10px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: #a8b2ff;
+    letter-spacing: -0.2px;
+  }
+  .modal-msg {
+    font-size: 13.5px;
+    color: var(--text-dim);
+    line-height: 1.55;
+    margin: 0 0 20px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .modal-actions button {
+    padding: 10px 20px;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border-hi);
+    background: var(--card2);
+    color: var(--text);
+    transition: transform 0.05s, filter 0.15s;
+  }
+  .modal-actions button:active { transform: scale(0.97); }
+  .modal-actions button:hover { filter: brightness(1.1); }
+  .modal-actions button.modal-primary {
+    background: linear-gradient(135deg, #3a4680, #2a3160);
+    border-color: #4a5380;
+    color: #cfe0ff;
+  }
+  .modal-actions button.modal-danger {
+    background: linear-gradient(135deg, #7a1e28, #5a1218);
+    border-color: #8a2832;
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -615,9 +692,92 @@
   </button>
 </nav>
 
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <h3 class="modal-title" id="modalTitle"></h3>
+    <p class="modal-msg" id="modalMsg"></p>
+    <div class="modal-actions">
+      <button id="modalCancel">Cancel</button>
+      <button id="modalConfirm" class="modal-primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
+
+  /* =========================================================
+     Modal dialogs (replace native confirm/alert which don't work
+     reliably in WebView without a WebChromeClient, and can't be
+     styled on Android anyway)
+     ========================================================= */
+  let _modalCleanup = null;
+
+  function showConfirm(opts) {
+    return new Promise(resolve => {
+      const overlay = $("modalOverlay");
+      const titleEl = $("modalTitle");
+      const msgEl = $("modalMsg");
+      const cancelBtn = $("modalCancel");
+      const confirmBtn = $("modalConfirm");
+
+      titleEl.textContent = opts.title || "Confirm";
+      msgEl.textContent = opts.message || "";
+      cancelBtn.textContent = opts.cancelText || "Cancel";
+      confirmBtn.textContent = opts.confirmText || "OK";
+
+      confirmBtn.classList.remove("modal-danger", "modal-primary");
+      confirmBtn.classList.add(opts.danger ? "modal-danger" : "modal-primary");
+
+      cancelBtn.style.display = opts.hideCancel ? "none" : "";
+
+      // If a modal is already open, cancel it first
+      if (_modalCleanup) _modalCleanup(false);
+
+      overlay.classList.add("show");
+
+      const cleanup = (result) => {
+        overlay.classList.remove("show");
+        cancelBtn.removeEventListener("click", onCancel);
+        confirmBtn.removeEventListener("click", onConfirm);
+        overlay.removeEventListener("click", onOverlay);
+        document.removeEventListener("keydown", onKey);
+        _modalCleanup = null;
+        resolve(result);
+      };
+      const onCancel = () => cleanup(false);
+      const onConfirm = () => cleanup(true);
+      const onOverlay = (e) => { if (e.target === overlay) cleanup(false); };
+      const onKey = (e) => { if (e.key === "Escape") cleanup(false); };
+
+      cancelBtn.addEventListener("click", onCancel);
+      confirmBtn.addEventListener("click", onConfirm);
+      overlay.addEventListener("click", onOverlay);
+      document.addEventListener("keydown", onKey);
+
+      _modalCleanup = cleanup;
+    });
+  }
+
+  function showAlert(title, message) {
+    return showConfirm({
+      title: title || "Notice",
+      message: message || "",
+      confirmText: "OK",
+      hideCancel: true,
+      danger: false
+    });
+  }
+
+  // Route existing alert() calls to the modal
+  window.alert = function (msg) {
+    showAlert("Notice", String(msg == null ? "" : msg));
+  };
+
+  window.showConfirm = showConfirm;
+  window.showAlert = showAlert;
+
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
@@ -1067,6 +1227,8 @@
   }));
 
   window.__backHandler = function () {
+    // Modal takes priority — close it if open
+    if (_modalCleanup) { _modalCleanup(false); return true; }
     if (wifiStack.length > 1) { popWifiView(); return true; }
     if (typeof btStack !== "undefined" && btStack.length > 1) { popBtView(); return true; }
     const active = document.querySelector(".tabbar button.active");
@@ -1139,8 +1301,14 @@
     });
   }
 
-  $("btnClearWifiHistory").addEventListener("click", () => {
-    if (!confirm("Clear all Wi-Fi history? This cannot be undone.")) return;
+  $("btnClearWifiHistory").addEventListener("click", async () => {
+    const ok = await showConfirm({
+      title: "Clear Wi-Fi history?",
+      message: "Every recorded network, sighting, and connection will be permanently deleted.\n\nThis cannot be undone.",
+      confirmText: "Delete",
+      danger: true
+    });
+    if (!ok) return;
     Android.clearWifiNetworks();
     networkStatsCache = {};
     renderWifiHistoryList();
@@ -1685,8 +1853,14 @@
     });
   }
 
-  $("btnClearBtHistory").addEventListener("click", () => {
-    if (!confirm("Clear all Bluetooth history? This cannot be undone.")) return;
+  $("btnClearBtHistory").addEventListener("click", async () => {
+    const ok = await showConfirm({
+      title: "Clear Bluetooth history?",
+      message: "Every recorded device, sighting, and connection will be permanently deleted.\n\nThis cannot be undone.",
+      confirmText: "Delete",
+      danger: true
+    });
+    if (!ok) return;
     Android.clearBluetoothHistory();
     renderBtHistoryList();
   });
@@ -2091,8 +2265,14 @@
       drawLocHistory(safeJSON(Android.getLocationHistory(), []));
   };
 
-  $("btnClearHistory").addEventListener("click", () => {
-    if (!confirm("Clear all saved location history?")) return;
+  $("btnClearHistory").addEventListener("click", async () => {
+    const ok = await showConfirm({
+      title: "Clear location history?",
+      message: "Every saved location point will be permanently deleted.\n\nThis cannot be undone.",
+      confirmText: "Delete",
+      danger: true
+    });
+    if (!ok) return;
     Android.clearLocationHistory();
     locTrailPoints = [];
     if (locTrail) locTrail.setLatLngs([]);

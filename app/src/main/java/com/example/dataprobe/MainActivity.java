@@ -33,6 +33,7 @@ import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import androidx.annotation.NonNull;
@@ -158,6 +159,7 @@ public class MainActivity extends AppCompatActivity {
                 scanHandler.postDelayed(MainActivity.this::pushAllData, 5000);
             }
         });
+        webView.setWebChromeClient(new WebChromeClient());
         webView.addJavascriptInterface(new AndroidBridge(), "Android");
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
@@ -1167,7 +1169,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void clearWifiNetworks() {
-            runOnUiThread(() -> { try { wifiNetworksFile().delete(); } catch (Exception ignored) {} });
+            try { wifiNetworksFile().delete(); } catch (Exception ignored) {}
         }
 
         /* ---- Bluetooth ---- */
@@ -1242,7 +1244,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void clearBluetoothHistory() {
-            runOnUiThread(() -> { try { btDevicesFile().delete(); } catch (Exception ignored) {} });
+            try { btDevicesFile().delete(); } catch (Exception ignored) {}
         }
 
         @JavascriptInterface
@@ -1444,7 +1446,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public String getLocationHistory() { return readLocationHistory().toString(); }
         @JavascriptInterface public void clearLocationHistory() {
-            runOnUiThread(() -> { try { locationHistoryFile().delete(); } catch (Exception ignored) {} });
+            try { locationHistoryFile().delete(); } catch (Exception ignored) {}
         }
 
         /* ---- Installed apps ---- */
