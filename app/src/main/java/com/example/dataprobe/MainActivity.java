@@ -683,18 +683,20 @@ public class MainActivity extends AppCompatActivity {
                         return "health";
 
                     case BluetoothClass.Device.Major.PERIPHERAL:
-                        switch (minor) {
-                            case BluetoothClass.Device.PERIPHERAL_KEYBOARD:
-                            case BluetoothClass.Device.PERIPHERAL_KEYBOARD_POINTING:
-                                return "keyboard";
-                            case BluetoothClass.Device.PERIPHERAL_POINTING_DEVICE:
-                                return "mouse";
-                            case BluetoothClass.Device.PERIPHERAL_JOYSTICK:
-                            case BluetoothClass.Device.PERIPHERAL_GAMEPAD:
-                                return "gamepad";
-                            case BluetoothClass.Device.PERIPHERAL_REMOTE_CONTROL:
-                                return "remote";
-                        }
+                        // Raw hex values from Bluetooth CoD spec — many
+                        // PERIPHERAL_* constants are not in the public SDK
+                        if (minor == 0x0540) return "keyboard";        // keyboard
+                        if (minor == 0x05C0) return "keyboard";        // keyboard + pointing combo
+                        if (minor == 0x0580) return "mouse";           // pointing device
+                        if (minor == 0x0504) return "gamepad";         // joystick
+                        if (minor == 0x0508) return "gamepad";         // gamepad
+                        if (minor == 0x050C) return "remote";          // remote control
+                        if (minor == 0x0510) return "peripheral";      // sensing device
+                        if (minor == 0x0514) return "tablet";          // digitizer tablet
+                        if (minor == 0x0518) return "peripheral";      // card reader
+                        if (minor == 0x0520) return "peripheral";      // digital pen
+                        if (minor == 0x0524) return "scanner";         // handheld scanner
+                        if (minor == 0x0528) return "peripheral";      // gestural input
                         return "peripheral";
 
                     case BluetoothClass.Device.Major.IMAGING:
