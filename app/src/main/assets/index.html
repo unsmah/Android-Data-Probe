@@ -793,6 +793,10 @@
   /* ============ Permission banner ============ */
   const permBanner = $("permBanner");
   window.onPermissionsChanged = function (allGranted, locOn, btOn, wifiOn) {
+    // Always refresh the BT adapter card — its name becomes available
+    // only after BLUETOOTH_CONNECT is granted
+    if (typeof refreshBtAdapter === "function") refreshBtAdapter();
+
     const needsPerms = !allGranted;
     const needsLoc = allGranted && !locOn;
     const needsBt = allGranted && !btOn;
@@ -1936,6 +1940,30 @@
     }
     check();
   })();
+
+
+  /* Called by Java after permissions are granted or on resume —
+     refreshes data Java doesn't push directly. */
+  window.onRefreshAll = function () {
+    try { refreshBtAdapter(); } catch (e) {}
+    // Re-render current WiFi tab if visible
+    try {
+      const info = safeJSON(Android.getWifiInfo(), {});
+      if (info && !info.error) {
+        renderDL($("wifiInfoPrimary"), buildWifiPrimary(info));
+        const moreEl = $("wifiInfoMore");
+        moreEl.innerHTML = "";
+        const wrap = document.createElement("div");
+        moreEl.appendChild(wrap);
+        renderDL(wrap, buildWifiMore(info));
+      }
+    } catch (e) {}
+    // Re-render bonded devices list
+    try {
+      const bonded = safeJSON(Android.getBluetoothBondedDevices(), []);
+      if (typeof renderBonded === "function") renderBonded(bonded);
+    } catch (e) {}
+  };
 
   refreshPermissionBanner();
     window.onLocationUpdated(safeJSON(Android.getLocation(), {}));

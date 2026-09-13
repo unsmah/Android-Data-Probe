@@ -148,22 +148,14 @@ public class MainActivity extends AppCompatActivity {
             }
             @Override
             public void onPageFinished(WebView v, String url) {
-                // JS is now ready — push all available data
-                pushPermissionStatus();
-                pushWifiInfo();
-                pushBondedDevices();
-                pushLocation();
-                // And again shortly after in case the OS needs a beat
-                scanHandler.postDelayed(() -> {
-                    pushPermissionStatus();
-                    pushWifiInfo();
-                    pushBondedDevices();
-                    pushLocation();
-                }, 800);
-                scanHandler.postDelayed(() -> {
-                    pushWifiInfo();
-                    pushBondedDevices();
-                }, 2500);
+                // JS is now ready — push all available data.
+                // Repeat a few times to cover devices/permissions that
+                // initialize slightly after the page loads.
+                pushAllData();
+                scanHandler.postDelayed(MainActivity.this::pushAllData, 300);
+                scanHandler.postDelayed(MainActivity.this::pushAllData, 1000);
+                scanHandler.postDelayed(MainActivity.this::pushAllData, 2500);
+                scanHandler.postDelayed(MainActivity.this::pushAllData, 5000);
             }
         });
         webView.addJavascriptInterface(new AndroidBridge(), "Android");
@@ -326,6 +318,18 @@ public class MainActivity extends AppCompatActivity {
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
+    private void pushAllData() {
+        if (webView == null) return;
+        pushPermissionStatus();
+        pushWifiInfo();
+        pushBondedDevices();
+        pushLocation();
+        // Tell JS to refresh anything Java doesn't push directly
+        // (Bluetooth adapter name, Wi-Fi info card, etc.)
+        webView.post(() -> webView.evaluateJavascript(
+            "window.onRefreshAll && window.onRefreshAll();", null));
+    }
+
     /* ================= permissions ================= */
 
     private List<String> requiredPermissions() {
@@ -364,23 +368,20 @@ public class MainActivity extends AppCompatActivity {
         if (locGranted && !isLocationEnabled()) {
             new Handler(Looper.getMainLooper()).postDelayed(this::promptEnableLocation, 300);
         }
-        pushPermissionStatus();
-        scanHandler.postDelayed(() -> {
-            pushWifiInfo(); pushBondedDevices(); pushLocation(); pushPermissionStatus();
-        }, 500);
-        scanHandler.postDelayed(() -> {
-            pushWifiInfo(); pushBondedDevices(); pushLocation(); pushPermissionStatus();
-        }, 1500);
+        // Push repeatedly — the adapter and bonded list need a moment
+        // after the permission dialog is dismissed
+        pushAllData();
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 500);
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 1500);
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 3000);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        pushPermissionStatus();
-        pushWifiInfo();
-        pushBondedDevices();
-        pushLocation();
         new Thread(this::recordBondedDevices, "bt-bonded").start();
+        pushAllData();
+        scanHandler.postDelayed(MainActivity.this::pushAllData, 800);
     }
 
     private void pushPermissionStatus() {
