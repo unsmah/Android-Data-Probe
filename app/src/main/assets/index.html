@@ -2257,9 +2257,17 @@
       popupAnchor: [0, -38]
     });
   }
-  const PIN_CURRENT = makePin("#7c8cff");
-  const PIN_START   = makePin("#4ade80");
-  const PIN_END     = makePin("#f87171");
+  // Lazily create pins — Leaflet loads async, so L may not be ready yet
+  // when this script first runs.
+  let PIN_CURRENT = null, PIN_START = null, PIN_END = null;
+  function ensurePins() {
+    if (PIN_CURRENT) return true;
+    if (typeof L === "undefined") return false;
+    PIN_CURRENT = makePin("#7c8cff");
+    PIN_START   = makePin("#4ade80");
+    PIN_END     = makePin("#f87171");
+    return true;
+  }
 
   /* ---------- Custom controls (zoom + fullscreen stacked) ---------- */
   function makeControlStack(map, elId) {
@@ -2396,6 +2404,7 @@
       return;
     }
     if (typeof L === "undefined") { setTimeout(initTrackerMap, 150); return; }
+    if (!ensurePins()) { setTimeout(initTrackerMap, 150); return; }
 
     trackerMap = L.map("trackerMap", {
       zoomControl: false,   // we supply our own
@@ -2546,6 +2555,7 @@
   function initSessionMap() {
     if (sessionMap) { setTimeout(() => sessionMap.invalidateSize(), 60); return; }
     if (typeof L === "undefined") { setTimeout(initSessionMap, 150); return; }
+    if (!ensurePins()) { setTimeout(initSessionMap, 150); return; }
     sessionMap = L.map("sessionMap", {
       zoomControl: false,
       attributionControl: true
