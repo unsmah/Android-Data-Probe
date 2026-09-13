@@ -6,6 +6,31 @@
 <meta name="theme-color" content="#0a0c10">
 <title>Data Probe</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script>
+  // Load Leaflet asynchronously with a CDN fallback.
+  // This does NOT block page parsing — the app renders immediately and
+  // the map initializes whenever Leaflet becomes available.
+  (function () {
+    var cdns = [
+      "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",
+      "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+    ];
+    var idx = 0;
+    function tryNext() {
+      if (idx >= cdns.length) {
+        console.warn("Leaflet failed to load from all CDNs");
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = cdns[idx++];
+      s.async = true;
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    }
+    tryNext();
+  })();
+</script>
 <style>
   :root {
     --bg: #0a0c10; --card: #12151f; --card2: #171b26;
@@ -590,7 +615,6 @@
   </button>
 </nav>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
   "use strict";
