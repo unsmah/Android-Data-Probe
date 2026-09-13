@@ -662,7 +662,7 @@ public class MainActivity extends AppCompatActivity {
                         if (minor == 0x0608) return "camera";
                         if (minor == 0x0604) return "tv";
                         return "imaging";
-                    case BluetoothClass.Device.Major.NETWORK:
+                    case BluetoothClass.Device.Major.NETWORKING:
                         return "network";
                     case BluetoothClass.Device.Major.TOY:
                         return "gamepad";
