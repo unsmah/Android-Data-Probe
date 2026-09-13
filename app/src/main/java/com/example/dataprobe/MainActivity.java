@@ -146,6 +146,25 @@ public class MainActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView v, String url) {
                 return handleExternal(url);
             }
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                // JS is now ready — push all available data
+                pushPermissionStatus();
+                pushWifiInfo();
+                pushBondedDevices();
+                pushLocation();
+                // And again shortly after in case the OS needs a beat
+                scanHandler.postDelayed(() -> {
+                    pushPermissionStatus();
+                    pushWifiInfo();
+                    pushBondedDevices();
+                    pushLocation();
+                }, 800);
+                scanHandler.postDelayed(() -> {
+                    pushWifiInfo();
+                    pushBondedDevices();
+                }, 2500);
+            }
         });
         webView.addJavascriptInterface(new AndroidBridge(), "Android");
         webView.loadUrl("file:///android_asset/index.html");
@@ -493,6 +512,8 @@ public class MainActivity extends AppCompatActivity {
                 entry.put("lastSeen", now);
                 String caps = n.optString("Capabilities", "");
                 if (!caps.isEmpty()) entry.put("capabilities", caps);
+                String gen = n.optString("WiFiGeneration", "");
+                if (!gen.isEmpty()) entry.put("wifiGeneration", gen);
 
                 JSONArray sightings = entry.optJSONArray("sightings");
                 if (sightings == null) sightings = new JSONArray();
@@ -620,6 +641,36 @@ public class MainActivity extends AppCompatActivity {
         return out;
     }
 
+
+
+    /* ================= WiFi standard ================= */
+
+    private String wifiStandardName(int std, int freq) {
+        switch (std) {
+            case 1:  return "Wi-Fi 1-3 (Legacy 802.11a/b/g)";
+            case 4:  return "Wi-Fi 4 (802.11n)";
+            case 5:  return "Wi-Fi 5 (802.11ac)";
+            case 6:  return freq >= 5925 ? "Wi-Fi 6E (802.11ax 6 GHz)"
+                                          : "Wi-Fi 6 (802.11ax)";
+            case 7:  return "WiGig (802.11ad)";
+            case 8:  return "Wi-Fi 7 (802.11be)";
+            default: return "Unknown";
+        }
+    }
+
+    private int safeWifiStandard(WifiInfo info) {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) return info.getWifiStandard();
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private int safeWifiStandard(android.net.wifi.ScanResult r) {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) return r.getWifiStandard();
+        } catch (Exception ignored) {}
+        return 0;
+    }
 
     /* ================= Bluetooth device categorization ================= */
 
@@ -977,6 +1028,8 @@ public class MainActivity extends AppCompatActivity {
                 o.put("RSSI", info.getRssi());
                 o.put("LinkSpeed", info.getLinkSpeed());
                 o.put("Frequency", info.getFrequency());
+                int std = safeWifiStandard(info);
+                o.put("WiFiGeneration", wifiStandardName(std, info.getFrequency()));
                 o.put("IPAddress", intToIp(info.getIpAddress()));
 
                 String mac = getRealMacAddress();
@@ -1059,6 +1112,7 @@ public class MainActivity extends AppCompatActivity {
                     item.put("firstSeen", e.optLong("firstSeen", 0));
                     item.put("lastSeen", e.optLong("lastSeen", 0));
                     item.put("manufacturer", e.optString("manufacturer", lookupManufacturer(k)));
+                    item.put("wifiGeneration", e.optString("wifiGeneration", ""));
                     JSONArray s = e.optJSONArray("sightings");
                     JSONArray c = e.optJSONArray("connections");
                     item.put("sightings", s != null ? s.length() : 0);
@@ -1510,6 +1564,8 @@ public class MainActivity extends AppCompatActivity {
                     o.put("Level", r.level);
                     o.put("Frequency", r.frequency);
                     o.put("Capabilities", r.capabilities);
+                    int std = safeWifiStandard(r);
+                    o.put("WiFiGeneration", wifiStandardName(std, r.frequency));
                     arr.put(o);
                 }
             }

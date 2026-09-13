@@ -859,7 +859,7 @@
       m["City"] = publicIpInfo.city || "—";
     }
     m["Link speed"] = info.LinkSpeed != null ? (info.LinkSpeed + " Mbps") : "—";
-    m["Capabilities"] = info.Capabilities || "—";
+    m["Wi-Fi generation"] = info.WiFiGeneration || "—";
     m["IPv4"] = info.IPv4List;
     m["IPv6"] = info.IPv6List;
     return m;
@@ -932,6 +932,7 @@
       "Signal":              n.Level + " dBm (" + sig.pct + "%)",
       "Bars":                sig.bars + " / 4",
       "Frequency":           n.Frequency + " MHz (" + freqBand(n.Frequency) + ")",
+      "Wi-Fi generation":    n.WiFiGeneration || "—",
       "Security":            isOpenNetwork(n.Capabilities) ? "Open (no password)" : "Secured",
       "Router manufacturer": manuf,
       "First seen":          stats.firstSeen ? fmtDate(stats.firstSeen) : "—",
@@ -1204,6 +1205,7 @@
       "Best signal": bestLevel > -200 ? bestLevel + " dBm" : "—",
       "Latest signal": latestLevel ? latestLevel + " dBm" : "—",
       "Latest frequency": latestFreq ? latestFreq + " MHz (" + freqBand(latestFreq) + ")" : "—",
+      "Wi-Fi generation": d.wifiGeneration || "—",
       "Security": caps ? (isOpenNetwork(caps) ? "Open (no password)" : "Secured") : "Unknown",
       "First seen": fmtDate(d.firstSeen),
       "Last seen": fmtDate(d.lastSeen),
@@ -1473,13 +1475,13 @@
           const cat = d.Category || "bluetooth";
           return '<details class="item">' +
             '<summary>' +
-              '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+              '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">' +
                 btIcon(cat) +
                 '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' +
                   esc(d.Name) +
                 '</span>' +
-                '<span class="bt-category">' + esc(btCategoryLabel(cat)) + '</span>' +
               '</span>' +
+              '<span class="meta">' + esc(btCategoryLabel(cat)) + '</span>' +
             '</summary>' +
             '<div class="body">' +
               '<table class="kv-table">' +
@@ -1512,15 +1514,14 @@
     $("btList").insertAdjacentHTML("beforeend",
       '<details class="item">' +
         '<summary>' +
-          '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+          '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">' +
             btIcon(cat) +
             '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' +
               esc(d.Name) +
             '</span>' +
-            (d.Bonded ? '<span class="badge-connected">Paired</span>' : '') +
-            '<span class="bt-category">' + esc(btCategoryLabel(cat)) + '</span>' +
+            (d.Bonded ? '<span class="badge-connected" style="flex-shrink:0;">Paired</span>' : '') +
           '</span>' +
-          '<span class="meta">' + d.RSSI + 'dBm</span>' +
+          '<span class="meta">' + esc(btCategoryLabel(cat)) + ' · ' + d.RSSI + 'dBm</span>' +
         '</summary>' +
         '<div class="body">' +
           '<table class="kv-table">' +
