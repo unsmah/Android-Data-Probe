@@ -103,6 +103,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String WIFI_NETWORKS_FILE = "wifi_networks.json";
     private static final String LOCATION_HISTORY_FILE = "location_history.json";
     private static final String OUI_CACHE_FILE = "oui_cache.txt";
+    private static final String BT_DEVICES_FILE = "bluetooth_devices.json";
+    private static final long BT_CONNECTION_DEBOUNCE_MS = 5 * 60 * 1000L;
     private static final String OUI_URL = "https://raw.githubusercontent.com/Ringmast4r/OUI-Master-Database/master/LISTS/kismet_manuf.txt";
     private static final int LOCATION_HISTORY_MAX = 500;
     private static final int LIVE_SCAN_INTERVAL_MS = 35000;
@@ -358,6 +360,7 @@ public class MainActivity extends AppCompatActivity {
         pushWifiInfo();
         pushBondedDevices();
         pushLocation();
+        new Thread(this::recordBondedDevices, "bt-bonded").start();
     }
 
     private void pushPermissionStatus() {
@@ -614,6 +617,201 @@ public class MainActivity extends AppCompatActivity {
         return out;
     }
 
+
+    /* ================= Bluetooth device categorization ================= */
+
+    private String btDeviceCategory(BluetoothDevice device) {
+        try {
+            BluetoothClass cls = device.getBluetoothClass();
+            if (cls != null) {
+                int major = cls.getMajorDeviceClass();
+                int minor = cls.getDeviceClass();
+                switch (major) {
+                    case BluetoothClass.Device.Major.COMPUTER:
+                        if (minor == 0x010C) return "laptop";
+                        if (minor == 0x0104) return "desktop";
+                        if (minor == 0x0108) return "server";
+                        return "computer";
+                    case BluetoothClass.Device.Major.PHONE:
+                        if (minor == 0x020C) return "smartphone";
+                        return "phone";
+                    case BluetoothClass.Device.Major.AUDIO_VIDEO:
+                        if (minor == 0x0418 || minor == 0x0404) return "headphones";
+                        if (minor == 0x0414 || minor == 0x041C) return "speaker";
+                        if (minor == 0x0420 || minor == 0x0408) return "car";
+                        if (minor == 0x0410) return "microphone";
+                        if (minor == 0x0424) return "stb";
+                        if (minor == 0x042C || minor == 0x0428 || minor == 0x0438
+                                || minor == 0x043C) return "tv";
+                        if (minor == 0x0430 || minor == 0x0434 || minor == 0x0440) return "camera";
+                        return "audio";
+                    case BluetoothClass.Device.Major.WEARABLE:
+                        if (minor == 0x0704) return "watch";
+                        return "wearable";
+                    case BluetoothClass.Device.Major.HEALTH:
+                        return "health";
+                    case BluetoothClass.Device.Major.PERIPHERAL:
+                        if (minor == 0x0540 || minor == 0x05C0) return "keyboard";
+                        if (minor == 0x0580) return "mouse";
+                        if (minor == 0x0504 || minor == 0x0508) return "gamepad";
+                        if (minor == 0x050C) return "remote";
+                        return "peripheral";
+                    case BluetoothClass.Device.Major.IMAGING:
+                        if (minor == 0x0610) return "printer";
+                        if (minor == 0x0608) return "camera";
+                        if (minor == 0x0604) return "tv";
+                        return "imaging";
+                    case BluetoothClass.Device.Major.NETWORK:
+                        return "network";
+                    case BluetoothClass.Device.Major.TOY:
+                        return "gamepad";
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Name-based fallback
+        String name = null;
+        try { name = device.getName(); } catch (SecurityException ignored) {}
+        if (name != null) {
+            String n = name.toLowerCase();
+            if (n.contains("airpod") || n.contains("buds") || n.contains("headphone")
+                    || n.contains("headset") || n.contains("beats") || n.contains("freebuds")
+                    || n.contains("wh-") || n.contains("wf-")) return "headphones";
+            if (n.contains("watch") || n.contains("mi band") || n.contains("fitbit")) return "watch";
+            if (n.contains("speaker") || n.contains("sound") || n.contains("jbl")
+                    || n.contains("bose") || n.contains("sonos") || n.contains("boom"))
+                return "speaker";
+            if (n.contains("tv") || n.contains("bravia") || n.contains("fire tv")
+                    || n.contains("roku") || n.contains("chromecast")) return "tv";
+            if (n.contains("car") || n.contains("audi") || n.contains("bmw")
+                    || n.contains("toyota") || n.contains("renault") || n.contains("kia")
+                    || n.contains("hyundai") || n.contains("peugeot")) return "car";
+            if (n.contains("iphone") || n.contains("pixel") || n.contains("galaxy")
+                    || n.contains("phone") || n.contains("xiaomi") || n.contains("redmi")
+                    || n.contains("oneplus") || n.contains("oppo") || n.contains("vivo"))
+                return "smartphone";
+            if (n.contains("macbook") || n.contains("laptop") || n.contains("notebook"))
+                return "laptop";
+            if (n.contains("mouse")) return "mouse";
+            if (n.contains("keyboard")) return "keyboard";
+            if (n.contains("printer") || n.contains("hp ")) return "printer";
+            if (n.contains("hearing") || n.contains("oticon") || n.contains("phonak")
+                    || n.contains("starkey") || n.contains("widex") || n.contains("signia"))
+                return "hearing-aid";
+        }
+
+        try {
+            int type = device.getType();
+            if (type == BluetoothDevice.DEVICE_TYPE_LE) return "ble";
+        } catch (Exception ignored) {}
+
+        return "bluetooth";
+    }
+
+    /* ================= Bluetooth history storage ================= */
+
+    private File btDevicesFile() { return new File(getFilesDir(), BT_DEVICES_FILE); }
+
+    private JSONObject readBtIndex() {
+        try {
+            File f = btDevicesFile();
+            if (!f.exists()) return new JSONObject();
+            return new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+        } catch (Exception e) { return new JSONObject(); }
+    }
+
+    private void writeBtIndex(JSONObject index) {
+        try { Files.write(btDevicesFile().toPath(),
+                index.toString().getBytes(StandardCharsets.UTF_8)); }
+        catch (Exception ignored) {}
+    }
+
+    private void recordBluetoothSighting(BluetoothDevice device, int rssi, String source, boolean bonded) {
+        try {
+            String address = null;
+            try { address = device.getAddress(); } catch (SecurityException ignored) {}
+            if (address == null || address.isEmpty()) return;
+
+            JSONObject index = readBtIndex();
+            long now = System.currentTimeMillis();
+            Location loc = getLastLocationQuick();
+
+            JSONObject entry = index.optJSONObject(address);
+            if (entry == null) {
+                entry = new JSONObject();
+                entry.put("address", address);
+                String name = null;
+                try { name = device.getName(); } catch (SecurityException ignored) {}
+                entry.put("name", name != null ? name : "(unnamed)");
+                entry.put("firstSeen", now);
+                entry.put("category", btDeviceCategory(device));
+                entry.put("sightings", new JSONArray());
+                entry.put("connections", new JSONArray());
+                try { entry.put("deviceType", device.getType()); } catch (Exception ignored) {}
+            }
+            String nm = null;
+            try { nm = device.getName(); } catch (SecurityException ignored) {}
+            if (nm != null && !nm.isEmpty()) entry.put("name", nm);
+            entry.put("lastSeen", now);
+            entry.put("category", btDeviceCategory(device));
+
+            JSONArray sightings = entry.optJSONArray("sightings");
+            if (sightings == null) sightings = new JSONArray();
+
+            // Skip duplicate sights within 30s of the last one (same MAC)
+            boolean skip = false;
+            if (sightings.length() > 0) {
+                JSONArray last = sightings.optJSONArray(sightings.length() - 1);
+                if (last != null && now - last.optLong(0) < 30000) skip = true;
+            }
+            if (!skip) {
+                JSONArray pt = new JSONArray();
+                pt.put(now);
+                if (loc != null) {
+                    pt.put(loc.getLatitude()); pt.put(loc.getLongitude()); pt.put(loc.getAccuracy());
+                } else {
+                    pt.put(JSONObject.NULL); pt.put(JSONObject.NULL); pt.put(JSONObject.NULL);
+                }
+                pt.put(rssi);
+                pt.put(source);
+                sightings.put(pt);
+                entry.put("sightings", sightings);
+            }
+
+            // Track bonded observation as a "connection"
+            if (bonded) {
+                JSONArray conns = entry.optJSONArray("connections");
+                if (conns == null) conns = new JSONArray();
+                boolean add = true;
+                if (conns.length() > 0) {
+                    JSONArray last = conns.optJSONArray(conns.length() - 1);
+                    if (last != null && now - last.optLong(0) < BT_CONNECTION_DEBOUNCE_MS) add = false;
+                }
+                if (add) {
+                    JSONArray pt = new JSONArray();
+                    pt.put(now);
+                    if (loc != null) { pt.put(loc.getLatitude()); pt.put(loc.getLongitude()); }
+                    else { pt.put(JSONObject.NULL); pt.put(JSONObject.NULL); }
+                    conns.put(pt);
+                    entry.put("connections", conns);
+                }
+            }
+
+            index.put(address, entry);
+            writeBtIndex(index);
+        } catch (Exception ignored) {}
+    }
+
+    private void recordBondedDevices() {
+        try {
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) return;
+            Set<BluetoothDevice> bonded = bluetoothAdapter.getBondedDevices();
+            for (BluetoothDevice d : bonded) {
+                recordBluetoothSighting(d, 0, "bonded", true);
+            }
+        } catch (Exception ignored) {}
+    }
+
     /* ================= bridge ================= */
 
     public class AndroidBridge {
@@ -820,6 +1018,79 @@ public class MainActivity extends AppCompatActivity {
 
         /* ---- Bluetooth ---- */
         @JavascriptInterface
+        public String getBluetoothAdapterName() {
+            try {
+                if (bluetoothAdapter == null) return "";
+                String n = bluetoothAdapter.getName();
+                return n != null ? n : "";
+            } catch (Exception e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public String getBluetoothDeviceList() {
+            JSONArray list = new JSONArray();
+            try {
+                JSONObject index = readBtIndex();
+                Iterator<String> keys = index.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    JSONObject e = index.optJSONObject(k);
+                    if (e == null) continue;
+                    JSONObject item = new JSONObject();
+                    item.put("address", k);
+                    item.put("name", e.optString("name", "(unnamed)"));
+                    item.put("category", e.optString("category", "bluetooth"));
+                    item.put("firstSeen", e.optLong("firstSeen", 0));
+                    item.put("lastSeen", e.optLong("lastSeen", 0));
+                    JSONArray sArr = e.optJSONArray("sightings");
+                    JSONArray cArr = e.optJSONArray("connections");
+                    item.put("sightings", sArr != null ? sArr.length() : 0);
+                    item.put("connections", cArr != null ? cArr.length() : 0);
+                    // Latest location
+                    boolean gotLoc = false;
+                    if (sArr != null) {
+                        for (int i = sArr.length() - 1; i >= 0; i--) {
+                            JSONArray pt = sArr.optJSONArray(i);
+                            if (pt != null && pt.length() >= 3 && !pt.isNull(1) && !pt.isNull(2)) {
+                                item.put("lastLat", pt.optDouble(1));
+                                item.put("lastLon", pt.optDouble(2));
+                                item.put("lastRssi", pt.optInt(4, 0));
+                                gotLoc = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!gotLoc && cArr != null) {
+                        for (int i = cArr.length() - 1; i >= 0; i--) {
+                            JSONArray pt = cArr.optJSONArray(i);
+                            if (pt != null && pt.length() >= 3 && !pt.isNull(1) && !pt.isNull(2)) {
+                                item.put("lastLat", pt.optDouble(1));
+                                item.put("lastLon", pt.optDouble(2));
+                                break;
+                            }
+                        }
+                    }
+                    list.put(item);
+                }
+            } catch (Exception ignored) {}
+            return list.toString();
+        }
+
+        @JavascriptInterface
+        public String getBluetoothDeviceDetail(String mac) {
+            try {
+                JSONObject index = readBtIndex();
+                JSONObject e = index.optJSONObject(mac);
+                return e != null ? e.toString() : "null";
+            } catch (Exception ex) { return "null"; }
+        }
+
+        @JavascriptInterface
+        public void clearBluetoothHistory() {
+            runOnUiThread(() -> { try { btDevicesFile().delete(); } catch (Exception ignored) {} });
+        }
+
+        @JavascriptInterface
         public String getBluetoothBondedDevices() {
             JSONArray arr = new JSONArray();
             try {
@@ -903,10 +1174,14 @@ public class MainActivity extends AppCompatActivity {
                 o.put("Name", name != null ? name : "(unnamed)");
                 o.put("Address", address);
                 o.put("RSSI", rssi);
-                o.put("Type", device.getType());
-                try { o.put("Bonded", device.getBondState() == BluetoothDevice.BOND_BONDED); } catch (Exception ignored) {}
+                try { o.put("Type", device.getType()); } catch (Exception ignored) {}
+                boolean bonded = false;
+                try { bonded = device.getBondState() == BluetoothDevice.BOND_BONDED; } catch (Exception ignored) {}
+                o.put("Bonded", bonded);
                 o.put("Source", source);
+                o.put("Category", btDeviceCategory(device));
                 btSeen.put(address, o);
+                recordBluetoothSighting(device, rssi, source, bonded);
                 final String js = "window.onBluetoothDeviceFound(" + o + ")";
                 webView.post(() -> webView.evaluateJavascript(js, null));
             } catch (Exception ignored) {}
@@ -926,6 +1201,7 @@ public class MainActivity extends AppCompatActivity {
         private void finishBluetoothScan() {
             if (!isBluetoothScanning) return;
             isBluetoothScanning = false;
+            new Thread(MainActivity.this::recordBondedDevices, "bt-bonded").start();
             webView.post(() -> webView.evaluateJavascript("window.onBluetoothScanComplete()", null));
             if (bluetoothReceiver != null) {
                 try { unregisterReceiver(bluetoothReceiver); } catch (Exception ignored) {}

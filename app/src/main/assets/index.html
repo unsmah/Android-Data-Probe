@@ -354,6 +354,37 @@
     vertical-align: middle;
     flex-shrink: 0;
   }
+
+  #btMap {
+    height: 55vh; min-height: 320px; border-radius: 12px;
+    overflow: hidden; background: var(--card);
+    border: 1px solid var(--border); margin-top: 4px;
+  }
+  .bt-icon {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    vertical-align: middle;
+    color: var(--accent);
+  }
+  .bt-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: rgba(124,140,255,0.12);
+    border: 1px solid rgba(124,140,255,0.22);
+    flex-shrink: 0;
+  }
+  .bt-category {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-left: 6px;
+  }
 </style>
 </head>
 <body>
@@ -445,15 +476,65 @@
   </section>
 
   <section id="tab-bt" class="tab">
-    <h1>Bluetooth</h1>
-    <h2>Paired devices</h2>
-    <div id="btPaired"></div>
-    <h2>Live discovery</h2>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btnScanBt">Start scan</button>
-      <button class="btn" id="btnStopBt">Stop</button>
+    <div id="btViewRoot">
+      <h1>Bluetooth</h1>
+      <h2>My device</h2>
+      <div id="btAdapterInfo"></div>
+      <h2>Paired devices</h2>
+      <div id="btPaired"></div>
+      <h2>Live discovery</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnScanBt">Start scan</button>
+        <button class="btn" id="btnStopBt">Stop</button>
+      </div>
+      <div id="btList"></div>
+      <h2>History</h2>
+      <button class="btn btn-primary" id="btnOpenBtHistory" style="width:100%;">Show history</button>
     </div>
-    <div id="btList"></div>
+
+    <div id="btViewHistory" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="btBackRoot">&#8592; Bluetooth</button>
+      </div>
+      <h1>Bluetooth history</h1>
+      <p class="subtitle" id="btHistorySummary"></p>
+      <div class="subtabs" id="btHistoryTabs">
+        <button data-btab="paired">Paired</button>
+        <button data-btab="others" class="active">Others</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnPinAllBtOnMap" style="width:100%;">&#128506; Pin all on map</button>
+      </div>
+      <div id="btHistoryList"></div>
+      <button class="btn btn-danger" id="btnClearBtHistory" style="width:100%;">Clear all history</button>
+    </div>
+
+    <div id="btViewDevice" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="btBackHistory">&#8592; History</button>
+      </div>
+      <h1 id="btDevTitle"></h1>
+      <p class="subtitle" id="btDevSubtitle"></p>
+      <div id="btDevPrimary"></div>
+      <details class="item" style="margin-top:8px;">
+        <summary><span class="name">More details</span><span class="meta">&#9662;</span></summary>
+        <div class="body" id="btDevMore" style="padding:0;"></div>
+      </details>
+      <div class="btn-row" style="margin-top:14px;">
+        <button class="btn btn-primary" id="btnShowLatestBtMap" style="width:100%;">&#128205; Show latest location on map</button>
+      </div>
+      <button class="btn" id="btnToggleBtSightings" style="width:100%;">Show all sightings &#9662;</button>
+      <div id="btDevSightings" style="display:none; margin-top:10px;"></div>
+    </div>
+
+    <div id="btViewMap" style="display:none;">
+      <div class="back-bar">
+        <button class="back-btn" id="btBackMap">&#8592; Back</button>
+      </div>
+      <h1 id="btMapTitle"></h1>
+      <p class="subtitle" id="btMapSubtitle"></p>
+      <div id="btMap"></div>
+    </div>
   </section>
 
   <section id="tab-loc" class="tab">
@@ -716,6 +797,7 @@
     const st = safeJSON(Android.getPermissionStatus(), {});
     window.onPermissionsChanged(st.allGranted, st.locationEnabled,
       st.bluetoothEnabled, st.wifiEnabled);
+    if (typeof refreshBtAdapter === "function") refreshBtAdapter();
   }
 
   /* ============ HOME ============ */
@@ -957,6 +1039,7 @@
 
   window.__backHandler = function () {
     if (wifiStack.length > 1) { popWifiView(); return true; }
+    if (typeof btStack !== "undefined" && btStack.length > 1) { popBtView(); return true; }
     const active = document.querySelector(".tabbar button.active");
     if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
     return false;
@@ -1315,13 +1398,99 @@
   }
 
   /* ============ BLUETOOTH ============ */
+
+  /* Device category icons */
+  const BT_ICONS = {
+    smartphone: '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>',
+    phone:      '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>',
+    laptop:     '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>',
+    desktop:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>',
+    computer:   '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>',
+    server:     '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><circle cx="7" cy="7.5" r="0.8" fill="currentColor"/><circle cx="7" cy="16.5" r="0.8" fill="currentColor"/></svg>',
+    headphones: '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17v-5a9 9 0 0118 0v5"/><path d="M3 15a2 2 0 012-2h1v6H5a2 2 0 01-2-2z"/><path d="M21 15a2 2 0 00-2-2h-1v6h1a2 2 0 002-2z"/></svg>',
+    speaker:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="6" r="0.6" fill="currentColor"/></svg>',
+    audio:      '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
+    microphone: '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>',
+    car:        '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l1.5-5.5A2 2 0 018.4 8h7.2a2 2 0 011.9 1.5L19 15v4h-3v-1H8v1H5z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg>',
+    watch:      '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M9 3h6l-1 5M9 21h6l-1-5"/><path d="M12 9v3l2 1.5"/></svg>',
+    wearable:   '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M9 3h6l-1 5M9 21h6l-1-5"/></svg>',
+    tv:         '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>',
+    stb:        '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="8" cy="12" r="1.2"/><path d="M12 12h6"/></svg>',
+    camera:     '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+    printer:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M6 15h12v6H6z"/></svg>',
+    keyboard:   '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>',
+    mouse:      '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 2v6"/></svg>',
+    gamepad:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12a4 4 0 014 4l-1 6a2 2 0 01-3.5 1L15 17H9l-2.5 2A2 2 0 013.5 18L2.5 12A4 4 0 016.5 8z"/><path d="M8 12h2M9 11v2"/><circle cx="16" cy="12" r="0.8" fill="currentColor"/><circle cx="18" cy="14" r="0.8" fill="currentColor"/></svg>',
+    remote:     '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><path d="M10 13h4M10 16h4"/></svg>',
+    'hearing-aid': '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4a4 4 0 014 4v3c0 2 2 3 2 5a4 4 0 01-4 4c-2 0-3-1-3-2"/><circle cx="15" cy="10" r="1.2"/></svg>',
+    health:     '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5-7-11a4 4 0 017-2.5A4 4 0 0119 10c0 6-7 11-7 11z"/></svg>',
+    network:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 14V4h10v10"/><circle cx="7" cy="17.5" r="0.8" fill="currentColor"/><circle cx="11" cy="17.5" r="0.8" fill="currentColor"/></svg>',
+    imaging:    '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="12" r="4"/></svg>',
+    peripheral: '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>',
+    ble:        '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>',
+    bluetooth:  '<svg class="bt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>'
+  };
+
+  function btIcon(category) {
+    const svg = BT_ICONS[category] || BT_ICONS.bluetooth;
+    return '<span class="bt-icon-wrap">' + svg + '</span>';
+  }
+
+  function btCategoryLabel(cat) {
+    const labels = {
+      smartphone: "Phone", phone: "Phone", laptop: "Laptop", desktop: "Desktop",
+      computer: "Computer", server: "Server", headphones: "Headphones",
+      speaker: "Speaker", audio: "Audio", microphone: "Microphone", car: "Car",
+      watch: "Smartwatch", wearable: "Wearable", tv: "TV", stb: "Set-top box",
+      camera: "Camera", printer: "Printer", keyboard: "Keyboard", mouse: "Mouse",
+      gamepad: "Gamepad", remote: "Remote", "hearing-aid": "Hearing aid",
+      health: "Health", network: "Network", imaging: "Imaging",
+      peripheral: "Peripheral", ble: "BLE device", bluetooth: "Bluetooth device"
+    };
+    return labels[cat] || "Bluetooth device";
+  }
+
+  /* Adapter name */
+  function refreshBtAdapter() {
+    try {
+      const name = Android.getBluetoothAdapterName();
+      const rows = {
+        "Device name": name || "(not available)",
+        "Available": (Android.getPermissionStatus && safeJSON(Android.getPermissionStatus(), {}).bluetoothEnabled) ? "Yes" : "No"
+      };
+      renderDL($("btAdapterInfo"), rows);
+    } catch (e) {
+      renderDL($("btAdapterInfo"), { "Device name": "unavailable" });
+    }
+  }
+  refreshBtAdapter();
+
+
   function renderBonded(list) {
     $("btPaired").innerHTML = list.length
-      ? list.map(d => itemHTML(d.Name, d.Address, {
-          "Address": d.Address,
-          "Type":    deviceTypeLabel(d.Type),
-          "Paired":  "yes"
-        })).join("")
+      ? list.map(d => {
+          const cat = d.Category || "bluetooth";
+          return '<details class="item">' +
+            '<summary>' +
+              '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+                btIcon(cat) +
+                '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' +
+                  esc(d.Name) +
+                '</span>' +
+                '<span class="bt-category">' + esc(btCategoryLabel(cat)) + '</span>' +
+              '</span>' +
+              '<span class="meta">' + esc(d.Address) + '</span>' +
+            '</summary>' +
+            '<div class="body">' +
+              '<table class="kv-table">' +
+                '<tr><td class="kv-label">Address</td><td class="kv-value">' + esc(d.Address) + '</td></tr>' +
+                '<tr><td class="kv-label">Type</td><td class="kv-value">' + esc(deviceTypeLabel(d.Type)) + '</td></tr>' +
+                '<tr><td class="kv-label">Category</td><td class="kv-value">' + esc(btCategoryLabel(cat)) + '</td></tr>' +
+                '<tr><td class="kv-label">Paired</td><td class="kv-value">yes</td></tr>' +
+              '</table>' +
+            '</div>' +
+          '</details>';
+        }).join("")
       : '<div class="empty">No paired devices.</div>';
   }
   renderBonded(safeJSON(Android.getBluetoothBondedDevices(), []));
@@ -1339,14 +1508,32 @@
     if (btSeen.has(d.Address)) return;
     btSeen.add(d.Address);
     if (btSeen.size === 1) $("btList").innerHTML = "";
-    $("btList").insertAdjacentHTML("beforeend", itemHTML(d.Name, d.RSSI + "dBm", {
-      "Name":    d.Name,
-      "Address": d.Address,
-      "RSSI":    d.RSSI + " dBm",
-      "Type":    deviceTypeLabel(d.Type),
-      "Paired":  d.Bonded ? "yes" : "no",
-      "Source":  d.Source === "ble" ? "BLE" : "Classic"
-    }));
+    const cat = d.Category || "bluetooth";
+    $("btList").insertAdjacentHTML("beforeend",
+      '<details class="item">' +
+        '<summary>' +
+          '<span class="name" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+            btIcon(cat) +
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' +
+              esc(d.Name) +
+            '</span>' +
+            (d.Bonded ? '<span class="badge-connected">Paired</span>' : '') +
+            '<span class="bt-category">' + esc(btCategoryLabel(cat)) + '</span>' +
+          '</span>' +
+          '<span class="meta">' + d.RSSI + 'dBm</span>' +
+        '</summary>' +
+        '<div class="body">' +
+          '<table class="kv-table">' +
+            '<tr><td class="kv-label">Name</td><td class="kv-value">' + esc(d.Name) + '</td></tr>' +
+            '<tr><td class="kv-label">Address</td><td class="kv-value">' + esc(d.Address) + '</td></tr>' +
+            '<tr><td class="kv-label">RSSI</td><td class="kv-value">' + d.RSSI + ' dBm</td></tr>' +
+            '<tr><td class="kv-label">Type</td><td class="kv-value">' + esc(deviceTypeLabel(d.Type)) + '</td></tr>' +
+            '<tr><td class="kv-label">Category</td><td class="kv-value">' + esc(btCategoryLabel(cat)) + '</td></tr>' +
+            '<tr><td class="kv-label">Paired</td><td class="kv-value">' + (d.Bonded ? "yes" : "no") + '</td></tr>' +
+            '<tr><td class="kv-label">Source</td><td class="kv-value">' + (d.Source === "ble" ? "BLE" : "Classic") + '</td></tr>' +
+          '</table>' +
+        '</div>' +
+      '</details>');
   };
 
   window.onBluetoothScanComplete = () => {
@@ -1360,6 +1547,323 @@
     $("btnScanBt").disabled = false;
     $("btList").innerHTML = '<div class="empty">Error: ' + esc(msg) + '</div>';
   };
+
+  /* ---------- Bluetooth nav stack + history ---------- */
+  const btViews = {
+    root:    $("btViewRoot"),
+    history: $("btViewHistory"),
+    device:  $("btViewDevice"),
+    map:     $("btViewMap")
+  };
+  let btStack = ["root"];
+  let btHistorySubTab = "others";
+  let btCurrentDevice = null;
+
+  function renderBtView() {
+    const current = btStack[btStack.length - 1];
+    Object.entries(btViews).forEach(([k, el]) => {
+      el.style.display = (k === current ? "" : "none");
+    });
+    document.querySelector("main").scrollTop = 0;
+    if (current === "history") renderBtHistoryList();
+    if (current === "map" && btMapInstance) {
+      setTimeout(() => btMapInstance.invalidateSize(), 100);
+    }
+  }
+  function pushBtView(name) { btStack.push(name); renderBtView(); }
+  function popBtView()  { if (btStack.length > 1) { btStack.pop(); renderBtView(); } }
+
+  $("btnOpenBtHistory").addEventListener("click", () => pushBtView("history"));
+  $("btBackRoot").addEventListener("click", () => popBtView());
+  $("btBackHistory").addEventListener("click", () => popBtView());
+  $("btBackMap").addEventListener("click", () => popBtView());
+
+  tabs.forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.tab !== "bt" && btStack.length > 1) {
+      btStack = ["root"]; renderBtView();
+    }
+  }));
+
+  document.querySelectorAll("#btHistoryTabs button").forEach(b => {
+    b.addEventListener("click", () => {
+      btHistorySubTab = b.dataset.btab;
+      document.querySelectorAll("#btHistoryTabs button").forEach(x => {
+        x.classList.toggle("active", x === b);
+      });
+      renderBtHistoryList();
+    });
+  });
+
+  function renderBtHistoryList() {
+    const all = safeJSON(Android.getBluetoothDeviceList(), []);
+    const list = btHistorySubTab === "paired"
+      ? all.filter(d => d.connections > 0)
+      : all.filter(d => d.connections === 0);
+    list.sort((a, b) => b.lastSeen - a.lastSeen);
+
+    $("btHistorySummary").textContent =
+      list.length + " device" + (list.length === 1 ? "" : "s") + " · " +
+      (btHistorySubTab === "paired" ? "paired at least once" : "found but never paired");
+
+    if (!list.length) {
+      $("btHistoryList").innerHTML =
+        '<div class="empty">' +
+        (btHistorySubTab === "paired"
+          ? "No devices you have paired with yet."
+          : "No other devices found yet. Run a scan.") +
+        '</div>';
+      return;
+    }
+
+    $("btHistoryList").innerHTML = list.map(d => {
+      const cat = d.category || "bluetooth";
+      return '<div class="net-card" data-mac="' + esc(d.address) + '">' +
+        '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">' +
+          btIcon(cat) +
+          '<div class="left">' +
+            '<div class="net-ssid">' + esc(d.name || "(unnamed)") + '</div>' +
+            '<div class="net-sub">' + esc(d.address) +
+              ' · ' + esc(btCategoryLabel(cat)) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="chev">&#8250;</div>' +
+      '</div>';
+    }).join("");
+
+    $("btHistoryList").querySelectorAll(".net-card").forEach(card => {
+      card.addEventListener("click", () => openBtDevice(card.dataset.mac));
+    });
+  }
+
+  $("btnClearBtHistory").addEventListener("click", () => {
+    if (!confirm("Clear all Bluetooth history? This cannot be undone.")) return;
+    Android.clearBluetoothHistory();
+    renderBtHistoryList();
+  });
+
+  /* ---------- Bluetooth device detail ---------- */
+  function openBtDevice(mac) {
+    const detail = safeJSON(Android.getBluetoothDeviceDetail(mac), null);
+    if (!detail) { alert("Device not found."); return; }
+    btCurrentDevice = detail;
+    renderBtDeviceDetail(detail);
+    pushBtView("device");
+  }
+
+  function renderBtDeviceDetail(d) {
+    const cat = d.category || "bluetooth";
+    $("btDevTitle").textContent = d.name || "(unnamed)";
+    $("btDevSubtitle").textContent = d.address || "";
+
+    const sightings = d.sightings || [];
+    const connections = d.connections || [];
+
+    let bestRssi = -200, latestRssi = 0;
+    for (const s of sightings) {
+      const r = s[4] || -200;
+      if (r > bestRssi && r !== 0) bestRssi = r;
+    }
+    if (sightings.length) {
+      const last = sightings[sightings.length - 1];
+      latestRssi = last[4] || 0;
+    }
+
+    renderDL($("btDevPrimary"), {
+      "Name":          d.name || "(unnamed)",
+      "Address":       d.address || "—",
+      "Category":      btCategoryLabel(cat),
+      "Times found":   sightings.length,
+      "Times paired":  connections.length
+    });
+
+    const moreEl = $("btDevMore");
+    moreEl.innerHTML = "";
+    const wrap = document.createElement("div");
+    moreEl.appendChild(wrap);
+    renderDL(wrap, {
+      "Best RSSI":    bestRssi > -200 ? bestRssi + " dBm" : "—",
+      "Latest RSSI":  latestRssi ? latestRssi + " dBm" : "—",
+      "Device type":  deviceTypeLabel(d.deviceType),
+      "First seen":   fmtDate(d.firstSeen),
+      "Last seen":    fmtDate(d.lastSeen)
+    });
+
+    $("btDevSightings").style.display = "none";
+    $("btnToggleBtSightings").textContent = "Show all sightings \u25BE";
+
+    $("btnToggleBtSightings").onclick = () => {
+      const visible = $("btDevSightings").style.display !== "none";
+      if (visible) {
+        $("btDevSightings").style.display = "none";
+        $("btnToggleBtSightings").textContent = "Show all sightings \u25BE";
+      } else {
+        renderBtSightingsList(sightings);
+        $("btDevSightings").style.display = "";
+        $("btnToggleBtSightings").textContent = "Hide sightings \u25B4";
+      }
+    };
+
+    $("btnShowLatestBtMap").onclick = () => {
+      for (let i = sightings.length - 1; i >= 0; i--) {
+        const s = sightings[i];
+        if (typeof s[1] === "number" && typeof s[2] === "number") {
+          $("btMapTitle").textContent = d.name || "(unnamed)";
+          $("btMapSubtitle").textContent = "Detected at " + fmtDate(s[0]);
+          pushBtView("map");
+          setTimeout(() => {
+            initBtMap();
+            setTimeout(() => {
+              if (btMapInstance) btMapInstance.invalidateSize();
+              renderBtSinglePin(s[1], s[2], d.name, fmtDate(s[0]), cat);
+            }, 250);
+          }, 100);
+          return;
+        }
+      }
+      alert("No location recorded for this device.");
+    };
+  }
+
+  function renderBtSightingsList(sightings) {
+    const sorted = sightings.slice().reverse();
+    if (!sorted.length) {
+      $("btDevSightings").innerHTML = '<div class="empty">No sightings recorded.</div>';
+      return;
+    }
+    $("btDevSightings").innerHTML = sorted.map(s => {
+      const t = fmtDate(s[0]);
+      const hasLoc = typeof s[1] === "number" && typeof s[2] === "number";
+      const rssi = s[4] || 0;
+      const src = s[5] || "";
+      const mapBtn = hasLoc
+        ? '<button class="mini-btn" data-lat="' + s[1] + '" data-lon="' + s[2] +
+          '" data-time="' + esc(t) + '">&#128205; Map</button>'
+        : '<span class="mini-muted">no location</span>';
+      return '<div class="sighting-row" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #1a1f2a;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="color:var(--text-dim);font-family:ui-monospace,monospace;font-size:12px;margin-bottom:3px;">' + esc(t) + '</div>' +
+          '<div style="color:var(--text-dim);font-family:ui-monospace,monospace;font-size:11.5px;">' +
+            (rssi ? rssi + ' dBm' : '—') + (src ? ' · ' + esc(src) : '') + '</div>' +
+        '</div>' +
+        mapBtn +
+      '</div>';
+    }).join("");
+
+    $("btDevSightings").querySelectorAll(".mini-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const lat = parseFloat(btn.dataset.lat);
+        const lon = parseFloat(btn.dataset.lon);
+        const name = btCurrentDevice ? (btCurrentDevice.name || "(unnamed)") : "";
+        const cat = btCurrentDevice ? (btCurrentDevice.category || "bluetooth") : "bluetooth";
+        $("btMapTitle").textContent = name;
+        $("btMapSubtitle").textContent = "Detected at " + btn.dataset.time;
+        pushBtView("map");
+        setTimeout(() => {
+          initBtMap();
+          setTimeout(() => {
+            if (btMapInstance) btMapInstance.invalidateSize();
+            renderBtSinglePin(lat, lon, name, btn.dataset.time, cat);
+          }, 250);
+        }, 100);
+      });
+    });
+  }
+
+  /* ---------- Bluetooth map ---------- */
+  let btMapInstance = null;
+  let btMapLayer = null;
+
+  function initBtMap() {
+    if (btMapInstance) return;
+    if (typeof L === "undefined") { setTimeout(initBtMap, 150); return; }
+    btMapInstance = L.map("btMap", { zoomControl: true }).setView([0, 0], 2);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(btMapInstance);
+    btMapLayer = L.layerGroup().addTo(btMapInstance);
+  }
+
+  function renderBtSinglePin(lat, lon, name, time, cat) {
+    if (!btMapInstance || !btMapLayer) return;
+    btMapInstance.invalidateSize();
+    btMapLayer.clearLayers();
+    L.marker([lat, lon]).addTo(btMapLayer)
+      .bindPopup('<b>' + esc(name) + '</b><br>' +
+        '<span style="font-size:11px;color:#888;">' + esc(btCategoryLabel(cat)) + '</span><br>' +
+        esc(time)).openPopup();
+    btMapInstance.setView([lat, lon], 17);
+  }
+
+  function renderBtAllPins(pins) {
+    if (!btMapInstance || !btMapLayer) return;
+    btMapInstance.invalidateSize();
+    btMapLayer.clearLayers();
+    const groups = new Map();
+    pins.forEach(p => {
+      const key = p.lastLat.toFixed(4) + "," + p.lastLon.toFixed(4);
+      if (!groups.has(key)) groups.set(key, { lat: p.lastLat, lon: p.lastLon, devs: [] });
+      groups.get(key).devs.push(p);
+    });
+    const bounds = [];
+    groups.forEach(g => {
+      bounds.push([g.lat, g.lon]);
+      let popup;
+      if (g.devs.length === 1) {
+        const d = g.devs[0];
+        popup = '<div style="min-width:180px;">' +
+          '<b>' + esc(d.name || "(unnamed)") + '</b><br>' +
+          '<span style="font-family:monospace;font-size:11px;">' + esc(d.address) + '</span><br>' +
+          esc(btCategoryLabel(d.category || "bluetooth")) + '<br>' +
+          (d.connections > 0 ? '<span style="color:#4ade80;">✓ paired ' + d.connections + '×</span><br>' : '') +
+          'Last seen: ' + esc(fmtDate(d.lastSeen)) + '</div>';
+      } else {
+        const rows = g.devs.map(d =>
+          '<div style="margin-bottom:8px;">' +
+            '<b>' + esc(d.name || "(unnamed)") + '</b>' +
+            (d.connections > 0 ? ' <span style="color:#4ade80;font-weight:bold;">✓</span>' : '') +
+            '<br><span style="font-family:monospace;font-size:10.5px;color:#999;">' + esc(d.address) + '</span>' +
+            '<br><span style="font-size:10.5px;color:#888;">' + esc(btCategoryLabel(d.category || "bluetooth")) + '</span>' +
+          '</div>'
+        ).join("");
+        popup = '<div style="min-width:220px;max-width:280px;">' +
+          '<b>' + g.devs.length + ' devices at this location</b>' +
+          '<hr style="border:none;border-top:1px solid #ddd;margin:8px 0;">' + rows + '</div>';
+      }
+      L.marker([g.lat, g.lon]).addTo(btMapLayer).bindPopup(popup, { maxWidth: 320 });
+    });
+    if (bounds.length === 1) {
+      btMapInstance.setView(bounds[0], 16);
+      btMapLayer.eachLayer(l => l.openPopup && l.openPopup());
+    } else if (bounds.length > 1) {
+      btMapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+    }
+  }
+
+  $("btnPinAllBtOnMap").addEventListener("click", () => {
+    const list = safeJSON(Android.getBluetoothDeviceList(), []);
+    const filtered = btHistorySubTab === "paired"
+      ? list.filter(d => d.connections > 0)
+      : list.filter(d => d.connections === 0);
+    const pins = filtered.filter(d =>
+      typeof d.lastLat === "number" && typeof d.lastLon === "number");
+
+    if (!pins.length) {
+      alert("No devices in this tab have a recorded location yet.\n\n" +
+        "Turn on location services and run a scan first.");
+      return;
+    }
+    const tabName = btHistorySubTab === "paired" ? "Paired" : "Others";
+    $("btMapTitle").textContent = tabName + " — Bluetooth map";
+    $("btMapSubtitle").textContent = pins.length + " device" +
+      (pins.length === 1 ? "" : "s");
+    pushBtView("map");
+    setTimeout(() => {
+      initBtMap();
+      setTimeout(() => {
+        if (btMapInstance) btMapInstance.invalidateSize();
+        renderBtAllPins(pins);
+      }, 250);
+    }, 100);
+  });
 
   /* ============ LOCATION ============ */
   let currentLat = null, currentLon = null;
