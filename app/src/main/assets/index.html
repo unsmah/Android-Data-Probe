@@ -932,7 +932,7 @@
       "Signal":              n.Level + " dBm (" + sig.pct + "%)",
       "Bars":                sig.bars + " / 4",
       "Frequency":           n.Frequency + " MHz (" + freqBand(n.Frequency) + ")",
-      "Capabilities":        n.Capabilities || "(open network)",
+      "Security":            isOpenNetwork(n.Capabilities) ? "Open (no password)" : "Secured",
       "Router manufacturer": manuf,
       "First seen":          stats.firstSeen ? fmtDate(stats.firstSeen) : "—",
       "Last seen":           stats.lastSeen ? fmtDate(stats.lastSeen) : "—",
@@ -1199,13 +1199,14 @@
 
     // More
     const curWifi = safeJSON(Android.getWifiInfo(), {});
+    const caps = d.capabilities || "";
     const more = {
       "Best signal": bestLevel > -200 ? bestLevel + " dBm" : "—",
       "Latest signal": latestLevel ? latestLevel + " dBm" : "—",
       "Latest frequency": latestFreq ? latestFreq + " MHz (" + freqBand(latestFreq) + ")" : "—",
+      "Security": caps ? (isOpenNetwork(caps) ? "Open (no password)" : "Secured") : "Unknown",
       "First seen": fmtDate(d.firstSeen),
       "Last seen": fmtDate(d.lastSeen),
-      "Capabilities": (sightings.length ? (sightings[sightings.length-1][5] ? "" : "") : "") || "—",
       "IPv4": curWifi.IPv4List,
       "IPv6": curWifi.IPv6List
     };
@@ -1479,7 +1480,6 @@
                 '</span>' +
                 '<span class="bt-category">' + esc(btCategoryLabel(cat)) + '</span>' +
               '</span>' +
-              '<span class="meta">' + esc(d.Address) + '</span>' +
             '</summary>' +
             '<div class="body">' +
               '<table class="kv-table">' +

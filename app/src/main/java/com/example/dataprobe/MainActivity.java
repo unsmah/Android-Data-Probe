@@ -491,6 +491,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (!ssid.isEmpty()) entry.put("ssid", ssid);
                 entry.put("lastSeen", now);
+                String caps = n.optString("Capabilities", "");
+                if (!caps.isEmpty()) entry.put("capabilities", caps);
 
                 JSONArray sightings = entry.optJSONArray("sightings");
                 if (sightings == null) sightings = new JSONArray();
