@@ -627,87 +627,178 @@ public class MainActivity extends AppCompatActivity {
             if (cls != null) {
                 int major = cls.getMajorDeviceClass();
                 int minor = cls.getDeviceClass();
+
                 switch (major) {
                     case BluetoothClass.Device.Major.COMPUTER:
-                        if (minor == 0x010C) return "laptop";
-                        if (minor == 0x0104) return "desktop";
-                        if (minor == 0x0108) return "server";
+                        switch (minor) {
+                            case BluetoothClass.Device.COMPUTER_LAPTOP: return "laptop";
+                            case BluetoothClass.Device.COMPUTER_DESKTOP: return "desktop";
+                            case BluetoothClass.Device.COMPUTER_SERVER: return "server";
+                            case BluetoothClass.Device.COMPUTER_HANDHELD_PC_PDA: return "tablet";
+                            case BluetoothClass.Device.COMPUTER_PALM_SIZE_PC_PDA: return "tablet";
+                            case BluetoothClass.Device.COMPUTER_WEARABLE: return "watch";
+                        }
                         return "computer";
+
                     case BluetoothClass.Device.Major.PHONE:
-                        if (minor == 0x020C) return "smartphone";
+                        if (minor == BluetoothClass.Device.PHONE_SMART) return "smartphone";
                         return "phone";
+
                     case BluetoothClass.Device.Major.AUDIO_VIDEO:
-                        if (minor == 0x0418 || minor == 0x0404) return "headphones";
-                        if (minor == 0x0414 || minor == 0x041C) return "speaker";
-                        if (minor == 0x0420 || minor == 0x0408) return "car";
-                        if (minor == 0x0410) return "microphone";
-                        if (minor == 0x0424) return "stb";
-                        if (minor == 0x042C || minor == 0x0428 || minor == 0x0438
-                                || minor == 0x043C) return "tv";
-                        if (minor == 0x0430 || minor == 0x0434 || minor == 0x0440) return "camera";
+                        switch (minor) {
+                            case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
+                            case BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES:
+                                return "headphones";
+                            case BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER:
+                            case BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO:
+                            case BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO:
+                                return "speaker";
+                            case BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO:
+                                return "car";
+                            case BluetoothClass.Device.AUDIO_VIDEO_MICROPHONE:
+                                return "microphone";
+                            case BluetoothClass.Device.AUDIO_VIDEO_SET_TOP_BOX:
+                                return "stb";
+                            case BluetoothClass.Device.AUDIO_VIDEO_VIDEO_MONITOR:
+                            case BluetoothClass.Device.AUDIO_VIDEO_VIDEO_DISPLAY_AND_LOUDSPEAKER:
+                                return "tv";
+                            case BluetoothClass.Device.AUDIO_VIDEO_VIDEO_CAMERA:
+                            case BluetoothClass.Device.AUDIO_VIDEO_CAMCORDER:
+                                return "camera";
+                            case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
+                                return "headphones";
+                            case BluetoothClass.Device.AUDIO_VIDEO_VIDEO_CONFERENCING:
+                                return "video";
+                        }
                         return "audio";
+
                     case BluetoothClass.Device.Major.WEARABLE:
-                        if (minor == 0x0704) return "watch";
+                        if (minor == BluetoothClass.Device.WEARABLE_WRIST_WATCH) return "watch";
+                        if (minor == BluetoothClass.Device.WEARABLE_GLASSES) return "glasses";
+                        if (minor == BluetoothClass.Device.WEARABLE_HELMET) return "helmet";
+                        if (minor == BluetoothClass.Device.WEARABLE_JACKET) return "jacket";
                         return "wearable";
+
                     case BluetoothClass.Device.Major.HEALTH:
                         return "health";
+
                     case BluetoothClass.Device.Major.PERIPHERAL:
-                        if (minor == 0x0540 || minor == 0x05C0) return "keyboard";
-                        if (minor == 0x0580) return "mouse";
-                        if (minor == 0x0504 || minor == 0x0508) return "gamepad";
-                        if (minor == 0x050C) return "remote";
+                        switch (minor) {
+                            case BluetoothClass.Device.PERIPHERAL_KEYBOARD:
+                            case BluetoothClass.Device.PERIPHERAL_KEYBOARD_POINTING:
+                                return "keyboard";
+                            case BluetoothClass.Device.PERIPHERAL_POINTING_DEVICE:
+                                return "mouse";
+                            case BluetoothClass.Device.PERIPHERAL_JOYSTICK:
+                            case BluetoothClass.Device.PERIPHERAL_GAMEPAD:
+                                return "gamepad";
+                            case BluetoothClass.Device.PERIPHERAL_REMOTE_CONTROL:
+                                return "remote";
+                        }
                         return "peripheral";
+
                     case BluetoothClass.Device.Major.IMAGING:
-                        if (minor == 0x0610) return "printer";
-                        if (minor == 0x0608) return "camera";
-                        if (minor == 0x0604) return "tv";
+                        switch (minor) {
+                            case BluetoothClass.Device.IMAGING_PRINTER: return "printer";
+                            case BluetoothClass.Device.IMAGING_SCANNER: return "scanner";
+                            case BluetoothClass.Device.IMAGING_CAMERA: return "camera";
+                            case BluetoothClass.Device.IMAGING_DISPLAY: return "tv";
+                        }
                         return "imaging";
+
                     case BluetoothClass.Device.Major.NETWORKING:
                         return "network";
+
                     case BluetoothClass.Device.Major.TOY:
                         return "gamepad";
+
+                    case BluetoothClass.Device.Major.UNCATEGORIZED:
+                        // fall through to name matching
+                        break;
                 }
             }
         } catch (Exception ignored) {}
 
-        // Name-based fallback
+        // Name-based fallback (crucial for BLE devices which have no CoD)
         String name = null;
         try { name = device.getName(); } catch (SecurityException ignored) {}
-        if (name != null) {
+        if (name != null && !name.isEmpty()) {
             String n = name.toLowerCase();
             if (n.contains("airpod") || n.contains("buds") || n.contains("headphone")
                     || n.contains("headset") || n.contains("beats") || n.contains("freebuds")
-                    || n.contains("wh-") || n.contains("wf-")) return "headphones";
-            if (n.contains("watch") || n.contains("mi band") || n.contains("fitbit")) return "watch";
+                    || n.contains("wh-") || n.contains("wf-") || n.contains("earbud")
+                    || n.contains("earphone") || n.contains("soundcore") || n.contains("edifier"))
+                return "headphones";
+            if (n.contains("watch") || n.contains("mi band") || n.contains("fitbit")
+                    || n.contains("amazfit") || n.contains("gear s") || n.contains("huawei watch"))
+                return "watch";
             if (n.contains("speaker") || n.contains("sound") || n.contains("jbl")
-                    || n.contains("bose") || n.contains("sonos") || n.contains("boom"))
+                    || n.contains("bose") || n.contains("sonos") || n.contains("boom")
+                    || n.contains("flip") || n.contains("charge") || n.contains("marshall"))
                 return "speaker";
             if (n.contains("tv") || n.contains("bravia") || n.contains("fire tv")
-                    || n.contains("roku") || n.contains("chromecast")) return "tv";
+                    || n.contains("roku") || n.contains("chromecast") || n.contains("apple tv")
+                    || n.contains("shield"))
+                return "tv";
             if (n.contains("car") || n.contains("audi") || n.contains("bmw")
                     || n.contains("toyota") || n.contains("renault") || n.contains("kia")
-                    || n.contains("hyundai") || n.contains("peugeot")) return "car";
+                    || n.contains("hyundai") || n.contains("peugeot") || n.contains("nissan")
+                    || n.contains("ford") || n.contains("mercedes") || n.contains("vw")
+                    || n.contains("volkswagen") || n.contains("seat") || n.contains("skoda")
+                    || n.contains("citroen") || n.contains("fiat") || n.contains("honda")
+                    || n.contains("mazda") || n.contains("mitsubishi") || n.contains("suzuki")
+                    || n.contains("dacia") || n.contains("opel") || n.contains("chevrolet"))
+                return "car";
             if (n.contains("iphone") || n.contains("pixel") || n.contains("galaxy")
                     || n.contains("phone") || n.contains("xiaomi") || n.contains("redmi")
-                    || n.contains("oneplus") || n.contains("oppo") || n.contains("vivo"))
+                    || n.contains("oneplus") || n.contains("oppo") || n.contains("vivo")
+                    || n.contains("huawei") || n.contains("realme") || n.contains("infinix"))
                 return "smartphone";
-            if (n.contains("macbook") || n.contains("laptop") || n.contains("notebook"))
+            if (n.contains("macbook") || n.contains("laptop") || n.contains("notebook")
+                    || n.contains("thinkpad") || n.contains("ideapad") || n.contains("pavilion"))
                 return "laptop";
+            if (n.contains("ipad") || n.contains("tablet") || n.contains("tab "))
+                return "tablet";
             if (n.contains("mouse")) return "mouse";
-            if (n.contains("keyboard")) return "keyboard";
-            if (n.contains("printer") || n.contains("hp ")) return "printer";
+            if (n.contains("keyboard") || n.contains("kbd")) return "keyboard";
+            if (n.contains("printer") || n.contains("hp ") || n.contains("epson")
+                    || n.contains("canon ") || n.contains("brother"))
+                return "printer";
             if (n.contains("hearing") || n.contains("oticon") || n.contains("phonak")
-                    || n.contains("starkey") || n.contains("widex") || n.contains("signia"))
+                    || n.contains("starkey") || n.contains("widex") || n.contains("signia")
+                    || n.contains("resound"))
                 return "hearing-aid";
+            if (n.contains("controller") || n.contains("gamepad") || n.contains("dualshock")
+                    || n.contains("dualsense") || n.contains("xbox"))
+                return "gamepad";
+            if (n.contains("stb") || n.contains("set-top") || n.contains("settop")
+                    || n.contains("decoder") || n.contains("receiver"))
+                return "stb";
         }
 
         try {
             int type = device.getType();
-            if (type == BluetoothDevice.DEVICE_TYPE_LE) return "ble";
+            if (type == BluetoothDevice.DEVICE_TYPE_LE
+                    || type == BluetoothDevice.DEVICE_TYPE_DUAL) return "ble";
         } catch (Exception ignored) {}
 
         return "bluetooth";
     }
+
+    /* Returns a short string showing raw CoD values for debugging */
+    private String btClassDebug(BluetoothDevice device) {
+        try {
+            BluetoothClass cls = device.getBluetoothClass();
+            if (cls == null) return "no CoD";
+            return "major=" + Integer.toHexString(cls.getMajorDeviceClass()) +
+                   " minor=" + Integer.toHexString(cls.getDeviceClass()) +
+                   " class=" + Integer.toHexString(cls.getClass());
+        } catch (Exception e) {
+            return "error";
+        }
+    }
+
+
 
     /* ================= Bluetooth history storage ================= */
 
@@ -746,6 +837,7 @@ public class MainActivity extends AppCompatActivity {
                 entry.put("name", name != null ? name : "(unnamed)");
                 entry.put("firstSeen", now);
                 entry.put("category", btDeviceCategory(device));
+                entry.put("classDebug", btClassDebug(device));
                 entry.put("sightings", new JSONArray());
                 entry.put("connections", new JSONArray());
                 try { entry.put("deviceType", device.getType()); } catch (Exception ignored) {}
@@ -755,6 +847,7 @@ public class MainActivity extends AppCompatActivity {
             if (nm != null && !nm.isEmpty()) entry.put("name", nm);
             entry.put("lastSeen", now);
             entry.put("category", btDeviceCategory(device));
+            entry.put("classDebug", btClassDebug(device));
 
             JSONArray sightings = entry.optJSONArray("sightings");
             if (sightings == null) sightings = new JSONArray();
@@ -1041,6 +1134,7 @@ public class MainActivity extends AppCompatActivity {
                     item.put("address", k);
                     item.put("name", e.optString("name", "(unnamed)"));
                     item.put("category", e.optString("category", "bluetooth"));
+                    item.put("classDebug", e.optString("classDebug", ""));
                     item.put("firstSeen", e.optLong("firstSeen", 0));
                     item.put("lastSeen", e.optLong("lastSeen", 0));
                     JSONArray sArr = e.optJSONArray("sightings");
