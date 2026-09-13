@@ -698,12 +698,11 @@ public class MainActivity extends AppCompatActivity {
                         return "peripheral";
 
                     case BluetoothClass.Device.Major.IMAGING:
-                        switch (minor) {
-                            case BluetoothClass.Device.IMAGING_PRINTER: return "printer";
-                            case BluetoothClass.Device.IMAGING_SCANNER: return "scanner";
-                            case BluetoothClass.Device.IMAGING_CAMERA: return "camera";
-                            case BluetoothClass.Device.IMAGING_DISPLAY: return "tv";
-                        }
+                        // Raw hex values — some IMAGING_* constants aren't public
+                        if (minor == 0x0604) return "printer";
+                        if (minor == 0x0620) return "scanner";
+                        if (minor == 0x0640) return "camera";
+                        if (minor == 0x0680) return "tv";
                         return "imaging";
 
                     case BluetoothClass.Device.Major.NETWORKING:
@@ -790,9 +789,8 @@ public class MainActivity extends AppCompatActivity {
         try {
             BluetoothClass cls = device.getBluetoothClass();
             if (cls == null) return "no CoD";
-            return "major=" + Integer.toHexString(cls.getMajorDeviceClass()) +
-                   " minor=" + Integer.toHexString(cls.getDeviceClass()) +
-                   " class=" + Integer.toHexString(cls.getClass());
+            return "major=0x" + Integer.toHexString(cls.getMajorDeviceClass()) +
+                   " minor=0x" + Integer.toHexString(cls.getDeviceClass());
         } catch (Exception e) {
             return "error";
         }
