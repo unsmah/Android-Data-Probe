@@ -1199,6 +1199,8 @@ public class MainActivity extends AppCompatActivity {
                     o.put("Address", safeAddress(d));
                     o.put("Type", d.getType());
                     o.put("Bonded", true);
+                    o.put("Category", btDeviceCategory(d));
+                    o.put("ClassDebug", btClassDebug(d));
                     arr.put(o);
                 }
             } catch (Exception ignored) {}
