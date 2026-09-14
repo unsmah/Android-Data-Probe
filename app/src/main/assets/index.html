@@ -2384,8 +2384,9 @@
 
   $("btnLocate").addEventListener("click", () => {
     renderLocHeader();
-    if (trackerMap && currentLat != null) {
-      trackerMap.setView([currentLat, currentLon], Math.max(trackerMap.getZoom() || 16, 16));
+    if (trackerMap && currentLat != null && trackerMap.flyTo) {
+      trackerMap.flyTo({ center: [currentLon, currentLat],
+        zoom: Math.max(trackerMap.getZoom() || 16, 16) });
     }
   });
 
@@ -2398,49 +2399,146 @@
   let trackerMap = null, trackerTrail = null, trackerMarker = null;
   let trackerPoints = [];
 
+  /* ---------- MapLibre GL tracker map ---------- */
+  const ML_VECTOR_STYLES = {
+    "Liberty (3D)": "https://tiles.openfreemap.org/styles/liberty",
+    "Bright (3D)":  "https://tiles.openfreemap.org/styles/bright",
+    "Positron":     "https://tiles.openfreemap.org/styles/positron"
+  };
+  const ML_RASTER_STYLES = {
+    "Satellite": { version: 8,
+      sources: { raster: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "© Esri" } },
+      layers: [{ id: "raster", type: "raster", source: "raster" }] },
+    "Google Streets": { version: 8,
+      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "raster", type: "raster", source: "raster" }] },
+    "Google Hybrid": { version: 8,
+      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "raster", type: "raster", source: "raster" }] },
+    "Google Satellite": { version: 8,
+      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "raster", type: "raster", source: "raster" }] }
+  };
+
   function initTrackerMap() {
-    if (trackerMap) {
-      setTimeout(() => trackerMap.invalidateSize(), 60);
-      return;
-    }
-    if (typeof L === "undefined") { setTimeout(initTrackerMap, 150); return; }
-    if (!ensurePins()) { setTimeout(initTrackerMap, 150); return; }
+    if (trackerMap) return;
+    if (typeof maplibregl === "undefined") { setTimeout(initTrackerMap, 150); return; }
 
-    trackerMap = L.map("trackerMap", {
-      zoomControl: false,   // we supply our own
+    trackerMap = new maplibregl.Map({
+      container: "trackerMap",
+      style: ML_VECTOR_STYLES["Liberty (3D)"],
+      center: [0, 0], zoom: 2, pitch: 0, bearing: 0,
       attributionControl: true
-    }).setView([0, 0], 2);
+    });
 
-    const baseLayers = buildBaseLayers();
-    baseLayers["OpenStreetMap"].addTo(trackerMap);
-    // collapsed: true → layers panel only visible on click
-    L.control.layers(baseLayers, null, {
-      position: "topright", collapsed: true
-    }).addTo(trackerMap);
+    trackerMap.addControl(new maplibregl.NavigationControl({
+      showCompass: true, showZoom: true, visualizePitch: true
+    }), "top-left");
 
-    trackerMap.addControl(makeControlStack(trackerMap, "trackerMap"));
-
-    trackerTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.9 }).addTo(trackerMap);
-    trackerMarker = L.marker([0, 0], { icon: PIN_CURRENT }).addTo(trackerMap);
-
-    setTimeout(() => trackerMap.invalidateSize(), 100);
-    setTimeout(() => trackerMap.invalidateSize(), 500);
-
-    const active = safeJSON(Android.getActiveSession(), null);
-    if (active && active.points && active.points.length) {
-      trackerPoints = active.points.map(p => [p[0], p[1]]);
-      trackerTrail.setLatLngs(trackerPoints);
-      const last = trackerPoints[trackerPoints.length - 1];
-      trackerMarker.setLatLng(last);
-      trackerMap.setView(last, 16);
-    } else {
-      const loc = safeJSON(Android.getLocationDetail(), {});
-      if (loc && typeof loc.Latitude === "number") {
-        const ll = [loc.Latitude, loc.Longitude];
-        trackerMarker.setLatLng(ll);
-        trackerMap.setView(ll, 16);
+    const fsCtrl = {
+      onAdd: function (map) {
+        const div = document.createElement("div");
+        div.className = "maplibregl-ctrl maplibregl-ctrl-group";
+        const btn = document.createElement("button");
+        btn.className = "maplibregl-ctrl-icon";
+        btn.type = "button"; btn.title = "Fullscreen";
+        btn.style.fontSize = "18px"; btn.innerHTML = "&#x26F6;";
+        btn.addEventListener("click", function () {
+          const el = document.getElementById("trackerMap");
+          const isFs = el.classList.toggle("map-fullscreen");
+          btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+          btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
+          setTimeout(() => map.resize(), 140);
+        });
+        div.appendChild(btn);
+        return div;
       }
-    }
+    };
+    trackerMap.addControl(fsCtrl, "top-left");
+
+    const layerCtrl = {
+      onAdd: function (map) {
+        const div = document.createElement("div");
+        div.className = "maplibregl-ctrl maplibregl-ctrl-group";
+        div.style.position = "relative";
+        const btn = document.createElement("button");
+        btn.className = "maplibregl-ctrl-icon";
+        btn.type = "button"; btn.title = "Layers";
+        btn.style.fontSize = "18px"; btn.innerHTML = "&#9776;";
+        btn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const existing = div.querySelector(".ml-layer-menu");
+          if (existing) { existing.remove(); return; }
+          const menu = document.createElement("div");
+          menu.className = "ml-layer-menu";
+          Object.keys(ML_VECTOR_STYLES).forEach(function (k) {
+            const b = document.createElement("button");
+            b.textContent = k;
+            b.addEventListener("click", function () {
+              map.setStyle(ML_VECTOR_STYLES[k]); menu.remove();
+            });
+            menu.appendChild(b);
+          });
+          Object.keys(ML_RASTER_STYLES).forEach(function (k) {
+            const b = document.createElement("button");
+            b.textContent = k;
+            b.addEventListener("click", function () {
+              map.setStyle(ML_RASTER_STYLES[k]); menu.remove();
+            });
+            menu.appendChild(b);
+          });
+          div.appendChild(menu);
+        });
+        div.appendChild(btn);
+        return div;
+      }
+    };
+    trackerMap.addControl(layerCtrl, "top-right");
+
+    trackerMap.on("load", function () {
+      trackerMap.addSource("trail", {
+        type: "geojson",
+        data: { type: "Feature", geometry: { type: "LineString", coordinates: [] } }
+      });
+      trackerMap.addLayer({
+        id: "trail", type: "line", source: "trail",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#7c8cff", "line-width": 4, "line-opacity": 0.9 }
+      });
+      trackerMap.addSource("marker", {
+        type: "geojson",
+        data: { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } }
+      });
+      trackerMap.addLayer({
+        id: "marker", type: "circle", source: "marker",
+        paint: {
+          "circle-radius": 8, "circle-color": "#7c8cff",
+          "circle-stroke-color": "#ffffff", "circle-stroke-width": 3
+        }
+      });
+
+      const active = safeJSON(Android.getActiveSession(), null);
+      if (active && active.points && active.points.length) {
+        trackerPoints = active.points.map(function (p) { return [p[1], p[0]]; });
+        trackerMap.getSource("trail").setData({
+          type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
+        });
+        const last = trackerPoints[trackerPoints.length - 1];
+        trackerMap.getSource("marker").setData({
+          type: "Feature", geometry: { type: "Point", coordinates: last }
+        });
+        trackerMap.jumpTo({ center: last, zoom: 16 });
+      } else {
+        const loc = safeJSON(Android.getLocationDetail(), {});
+        if (loc && typeof loc.Latitude === "number") {
+          const ll = [loc.Longitude, loc.Latitude];
+          trackerMap.getSource("marker").setData({
+            type: "Feature", geometry: { type: "Point", coordinates: ll }
+          });
+          trackerMap.jumpTo({ center: ll, zoom: 16 });
+        }
+      }
+    });
   }
 
   function updateTrackingUI() {
@@ -2455,8 +2553,8 @@
     trackerPoints = [];
     if (trackerTrail) trackerTrail.setLatLngs([]);
     // Fly to current position immediately
-    if (currentLat != null && trackerMap) {
-      trackerMap.setView([currentLat, currentLon], 17);
+    if (currentLat != null && trackerMap && trackerMap.jumpTo) {
+      trackerMap.jumpTo({ center: [currentLon, currentLat], zoom: 17 });
     }
     Android.startTrackingService();
     setTimeout(updateTrackingUI, 400);
@@ -2475,17 +2573,21 @@
   });
 
   window.onTrackingPoint = function (p) {
-    if (!trackerMap) initTrackerMap();
-    const ll = [p.lat, p.lon];
+    if (!trackerMap) { initTrackerMap(); return; }
+    if (!trackerMap.getSource || !trackerMap.getSource("trail")) return;
+    const ll = [p.lon, p.lat];
     trackerPoints.push(ll);
-    trackerTrail.setLatLngs(trackerPoints);
-    trackerMarker.setLatLng(ll);
-    // Auto-follow: keep the marker centered as tracking progresses
-    if (trackerMap.getZoom() < 15) trackerMap.setView(ll, 17);
+    trackerMap.getSource("trail").setData({
+      type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
+    });
+    trackerMap.getSource("marker").setData({
+      type: "Feature", geometry: { type: "Point", coordinates: ll }
+    });
+    const z = trackerMap.getZoom();
+    if (z < 15) trackerMap.jumpTo({ center: ll, zoom: 17 });
     else trackerMap.panTo(ll);
-    // Refresh header so satellites/signal update live
     renderLocHeader();
-  };
+  };;
 
   window.onTrackingStopped = function () {
     updateTrackingUI();
@@ -2626,8 +2728,8 @@
       if (!locTabInited) {
         locTabInited = true;
         setTimeout(initTrackerMap, 150);
-      } else if (trackerMap) {
-        setTimeout(() => trackerMap.invalidateSize(), 60);
+      } else if (trackerMap && trackerMap.resize) {
+        setTimeout(() => trackerMap.resize(), 60);
       }
       startLocAutoRefresh();
       renderSessionsList();
