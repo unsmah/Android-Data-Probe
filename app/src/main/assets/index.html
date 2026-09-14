@@ -6,16 +6,16 @@
 <meta name="theme-color" content="#0a0c10">
 <title>Data Probe</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css" rel="stylesheet" />
 <script>
   // Async MapLibre GL loader with multiple CDN fallbacks.
   (function () {
     window.__mlLoaded = false;
     window.__mlFailed = false;
     var cdns = [
-      "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
-      "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"
+      "https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js",
+      "https://cdn.jsdelivr.net/npm/maplibre-gl@5.1.0/dist/maplibre-gl.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.1.0/maplibre-gl.min.js"
     ];
     var i = 0;
     function tryNext() {
@@ -2543,14 +2543,14 @@
   let trackerPoints = [];    // [[lng, lat], ...]
 
   const ML_STYLES = {
-    /* Vector — 3D buildings */
-    "Carto Voyager":  { url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",  group: "Vector · 3D buildings" },
-    "Carto Positron": { url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", group: "Vector · 3D buildings" },
-    "Carto Dark":     { url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json", group: "Vector · 3D buildings" },
-    "OpenFreeMap Liberty": { url: "https://tiles.openfreemap.org/styles/liberty", group: "Vector · 3D buildings" },
-    "OpenFreeMap Bright":  { url: "https://tiles.openfreemap.org/styles/bright",  group: "Vector · 3D buildings" },
+    /* --- Vector · 3D buildings --- */
+    "Carto Voyager":  { url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",  group: "Vector · 3D" },
+    "Carto Positron": { url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", group: "Vector · 3D" },
+    "Carto Dark":     { url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json", group: "Vector · 3D" },
+    "OpenFreeMap Liberty": { url: "https://tiles.openfreemap.org/styles/liberty", group: "Vector · 3D" },
+    "OpenFreeMap Bright":  { url: "https://tiles.openfreemap.org/styles/bright",  group: "Vector · 3D" },
 
-    /* Raster */
+    /* --- Raster base maps --- */
     "OSM Standard": { group: "Raster", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
         tileSize: 256, attribution: "© OSM" } },
@@ -2559,19 +2559,36 @@
       sources: { r: { type: "raster", tiles: ["https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"],
         tileSize: 256, attribution: "© OSM, HOT" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
-    "OpenTopoMap": { group: "Raster · topographic", style: { version: 8,
+    "OpenTopoMap": { group: "Raster", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-        tileSize: 256, attribution: "© OpenTopoMap (CC-BY-SA)" } },
+        tileSize: 256, attribution: "© OpenTopoMap" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
-    "CyclOSM": { group: "Raster · topographic", style: { version: 8,
+    "CyclOSM": { group: "Raster", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
         tileSize: 256, attribution: "© CyclOSM" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
+
+    /* --- Satellite --- */
     "Satellite (Esri)": { group: "Satellite", style: { version: 8,
       sources: { r: { type: "raster",
         tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
         tileSize: 256, attribution: "© Esri" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Satellite + Labels": { group: "Satellite", style: { version: 8,
+      sources: {
+        img: { type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256, attribution: "© Esri" },
+        lbl: { type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256, attribution: "© Esri" }
+      },
+      layers: [
+        { id: "img", type: "raster", source: "img" },
+        { id: "lbl", type: "raster", source: "lbl" }
+      ] } },
+
+    /* --- Google --- */
     "Google Streets": { group: "Google", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
         tileSize: 256, attribution: "© Google" } },
@@ -2584,11 +2601,38 @@
       sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
         tileSize: 256, attribution: "© Google" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Google Terrain": { group: "Google", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}"],
+        tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
 
-    /* Weather overlay */
-    "RainViewer (weather)": { group: "Weather overlay", style: { version: 8,
-      sources: { r: { type: "raster", tiles: ["https://tilecache.rainviewer.com/v2/radar/nowcast_0/256/{z}/{x}/{y}/2/1_1.png"],
+    /* --- Weather --- */
+    "Rain Radar": { group: "Weather", style: { version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://tilecache.rainviewer.com/v2/radar/nowcast_0/256/{z}/{x}/{y}/2/1_1.png"],
         tileSize: 256, attribution: "© RainViewer" } },
+      layers: [{ id: "r", type: "raster", source: "r", paint: { "raster-opacity": 0.8 } }] } },
+    "Clouds (NASA GIBS)": { group: "Weather", style: { version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"],
+        tileSize: 256, attribution: "© NASA GIBS" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+
+    /* --- Special --- */
+    "Blue Marble (NASA)": { group: "Special", style: { version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg"],
+        tileSize: 256, attribution: "© NASA Blue Marble" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Hillshade (Esri)": { group: "Special", style: { version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256, attribution: "© Esri" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Ocean Floor": { group: "Special", style: { version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256, attribution: "© Esri" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } }
   };
   let currentMLStyle = "Carto Voyager";
