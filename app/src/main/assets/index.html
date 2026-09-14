@@ -616,44 +616,74 @@
     position: absolute;
     top: 100%; right: 0;
     background: #fff;
-    border: 1px solid rgba(0,0,0,0.2);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
-    min-width: 200px;
-    max-width: 240px;
-    margin-top: 6px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.06);
+    min-width: 240px;
+    max-width: 280px;
+    max-height: 70vh;
+    margin-top: 8px;
     z-index: 500;
-    overflow: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 6px 0;
   }
   .ml-layer-menu .group-label {
-    padding: 8px 14px 4px;
-    font-size: 10.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 6px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #888;
-    background: #f6f6f6;
+    letter-spacing: 0.1em;
+    color: #8a8a92;
+  }
+  .ml-layer-menu .group-label::before {
+    content: "";
+    display: inline-block;
+    width: 3px; height: 11px;
+    border-radius: 2px;
+    background: #7c8cff;
   }
   .ml-layer-menu button {
-    display: block;
-    width: 100%;
-    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: calc(100% - 12px);
+    margin: 1px 6px;
+    padding: 10px 12px;
     background: none;
     border: none;
-    border-bottom: 1px solid #eee;
+    border-radius: 8px;
     text-align: left;
     font: inherit;
     font-size: 13.5px;
-    color: #333;
+    color: #2a2a35;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: background .12s;
   }
-  .ml-layer-menu button:last-child { border-bottom: none; }
-  .ml-layer-menu button:active { background: #eee; }
+  .ml-layer-menu button::before {
+    content: "";
+    flex-shrink: 0;
+    width: 14px; height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid #c8c8d0;
+    background: #fff;
+    transition: background .12s, border-color .12s;
+  }
+  .ml-layer-menu button:active { background: #f0f0f5; }
   .ml-layer-menu button.active {
-    background: #eef0ff; color: #3a4680; font-weight: 600;
+    background: #eef0ff;
+    color: #2a3160;
+    font-weight: 600;
+  }
+  .ml-layer-menu button.active::before {
+    background: #7c8cff;
+    border-color: #7c8cff;
+    box-shadow: inset 0 0 0 3px #fff;
   }
 
   /* Hide MapLibre logo (keep attribution text) */
@@ -1449,12 +1479,60 @@
   }));
 
   window.__backHandler = function () {
-    // Modal takes priority — close it if open
+    // 1) Modal — close it first
     if (_modalCleanup) { _modalCleanup(false); return true; }
-    if (wifiStack.length > 1) { popWifiView(); return true; }
-    if (typeof btStack !== "undefined" && btStack.length > 1) { popBtView(); return true; }
+
+    // 2) Wi-Fi sub-views
+    if (typeof wifiStack !== "undefined" && wifiStack.length > 1) {
+      popWifiView(); return true;
+    }
+
+    // 3) Bluetooth sub-views
+    if (typeof btStack !== "undefined" && btStack.length > 1) {
+      popBtView(); return true;
+    }
+
+    // 4) Location session view
+    const locRoot = document.getElementById("locViewRoot");
+    const locSess = document.getElementById("locViewSession");
+    if (locRoot && locSess && locRoot.style.display === "none") {
+      locRoot.style.display = "";
+      locSess.style.display = "none";
+      if (typeof sessionMap !== "undefined" && sessionMap) {
+        setTimeout(() => sessionMap.invalidateSize(), 60);
+      }
+      return true;
+    }
+
+    // 5) Exit fullscreen tracker map
+    const tMap = document.getElementById("trackerMap");
+    if (tMap && tMap.classList.contains("map-fullscreen")) {
+      tMap.classList.remove("map-fullscreen");
+      if (typeof trackerMap !== "undefined" && trackerMap) {
+        setTimeout(() => {
+          if (trackerMap.resize) trackerMap.resize();
+          else if (trackerMap.invalidateSize) trackerMap.invalidateSize();
+        }, 100);
+      }
+      return true;
+    }
+
+    // 6) Exit fullscreen session map
+    const sMap = document.getElementById("sessionMap");
+    if (sMap && sMap.classList.contains("map-fullscreen")) {
+      sMap.classList.remove("map-fullscreen");
+      if (typeof sessionMap !== "undefined" && sessionMap) {
+        setTimeout(() => sessionMap.invalidateSize(), 100);
+      }
+      return true;
+    }
+
+    // 7) Non-home tab → go home
     const active = document.querySelector(".tabbar button.active");
-    if (active && active.dataset.tab !== "home") { showTab("home"); return true; }
+    if (active && active.dataset.tab !== "home") {
+      showTab("home"); return true;
+    }
+
     return false;
   };
 
@@ -2465,27 +2543,52 @@
   let trackerPoints = [];    // [[lng, lat], ...]
 
   const ML_STYLES = {
-    "Carto Voyager":  { url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",  group: "Vector" },
-    "Carto Positron": { url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", group: "Vector" },
-    "Carto Dark":     { url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json", group: "Vector" },
-    "OpenFreeMap Liberty (3D)": { url: "https://tiles.openfreemap.org/styles/liberty", group: "3D (buildings)" },
-    "OpenFreeMap Bright (3D)":  { url: "https://tiles.openfreemap.org/styles/bright",  group: "3D (buildings)" },
-    "OSM Raster":     { group: "Raster", style: { version: 8,
+    /* Vector — 3D buildings */
+    "Carto Voyager":  { url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",  group: "Vector · 3D buildings" },
+    "Carto Positron": { url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", group: "Vector · 3D buildings" },
+    "Carto Dark":     { url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json", group: "Vector · 3D buildings" },
+    "OpenFreeMap Liberty": { url: "https://tiles.openfreemap.org/styles/liberty", group: "Vector · 3D buildings" },
+    "OpenFreeMap Bright":  { url: "https://tiles.openfreemap.org/styles/bright",  group: "Vector · 3D buildings" },
+
+    /* Raster */
+    "OSM Standard": { group: "Raster", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
         tileSize: 256, attribution: "© OSM" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
-    "Satellite (Esri)": { group: "Raster", style: { version: 8,
+    "OSM Humanitarian": { group: "Raster", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"],
+        tileSize: 256, attribution: "© OSM, HOT" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "OpenTopoMap": { group: "Raster · topographic", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
+        tileSize: 256, attribution: "© OpenTopoMap (CC-BY-SA)" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "CyclOSM": { group: "Raster · topographic", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
+        tileSize: 256, attribution: "© CyclOSM" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Satellite (Esri)": { group: "Satellite", style: { version: 8,
       sources: { r: { type: "raster",
         tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
         tileSize: 256, attribution: "© Esri" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
-    "Google Streets": { group: "Raster", style: { version: 8,
+    "Google Streets": { group: "Google", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
         tileSize: 256, attribution: "© Google" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } },
-    "Google Hybrid": { group: "Raster", style: { version: 8,
+    "Google Satellite": { group: "Google", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"],
+        tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+    "Google Hybrid": { group: "Google", style: { version: 8,
       sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
         tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "r", type: "raster", source: "r" }] } },
+
+    /* Weather overlay */
+    "RainViewer (weather)": { group: "Weather overlay", style: { version: 8,
+      sources: { r: { type: "raster", tiles: ["https://tilecache.rainviewer.com/v2/radar/nowcast_0/256/{z}/{x}/{y}/2/1_1.png"],
+        tileSize: 256, attribution: "© RainViewer" } },
       layers: [{ id: "r", type: "raster", source: "r" }] } }
   };
   let currentMLStyle = "Carto Voyager";
@@ -2529,9 +2632,19 @@
     trackerMap = new maplibregl.Map({
       container: "trackerMap",
       style: ML_STYLES[currentMLStyle].url || ML_STYLES[currentMLStyle].style,
-      center: [0, 0], zoom: 2, pitch: 0, bearing: 0,
+      center: [0, 0], zoom: 1, pitch: 0, bearing: 0,
+      minZoom: 0,
       attributionControl: { compact: true }
     });
+
+    // Globe projection — shows a proper globe when zoomed all the way out.
+    // Also keeps world copies off so the map doesn't repeat horizontally.
+    try {
+      trackerMap.setProjection({ type: "globe" });
+    } catch (e) {
+      // MapLibre < 4.0 doesn't support globe — silently fall back
+      console.warn("Globe projection unavailable:", e.message);
+    }
 
     trackerMap.addControl(new maplibregl.NavigationControl({
       showCompass: true, showZoom: true, visualizePitch: true
@@ -2592,8 +2705,12 @@
                 try {
                   const styleDef = ML_STYLES[k].url || ML_STYLES[k].style;
                   map.setStyle(styleDef);
-                  // Re-add trail/marker once the new style has loaded
-                  map.once("styledata", addMLTrailLayers);
+                  // Re-add trail/marker once the new style has loaded.
+                  // Also re-apply globe in case the style reset it.
+                  map.once("styledata", function () {
+                    try { map.setProjection({ type: "globe" }); } catch (e) {}
+                    addMLTrailLayers();
+                  });
                 } catch (err) { console.warn(err); }
                 menu.remove();
               });
@@ -2709,14 +2826,21 @@
   }
 
   function destroyTrackerMap() {
-    if (!trackerMap) return;
-    try {
-      if (trackerEngine === "maplibre") trackerMap.remove();
-      else trackerMap.remove();
-    } catch (e) {}
-    trackerMap = null;
+    if (trackerMap) {
+      try { trackerMap.remove(); } catch (e) {}
+      trackerMap = null;
+    }
     trackerTrail = null;
     trackerMarker = null;
+    // Clear any leftover DOM so Leaflet/MapLibre don't stack
+    const el = $("trackerMap");
+    if (el) {
+      // Remove MapLibre / Leaflet artifacts
+      el.innerHTML = "";
+      el.classList.remove("maplibregl-map", "leaflet-container",
+                          "leaflet-touch", "leaflet-fade-anim", "leaflet-grab");
+      el.removeAttribute("style");
+    }
   }
 
   function initTrackerMap() {
