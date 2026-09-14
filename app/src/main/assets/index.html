@@ -6,6 +6,34 @@
 <meta name="theme-color" content="#0a0c10">
 <title>Data Probe</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script>
+  // Async MapLibre GL loader with multiple CDN fallbacks.
+  (function () {
+    window.__mlLoaded = false;
+    window.__mlFailed = false;
+    var cdns = [
+      "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+      "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"
+    ];
+    var i = 0;
+    function tryNext() {
+      if (i >= cdns.length) {
+        console.warn("MapLibre failed to load from all CDNs — will use Leaflet fallback");
+        window.__mlFailed = true;
+        return;
+      }
+      var sc = document.createElement("script");
+      sc.src = cdns[i++];
+      sc.async = true;
+      sc.onload = function () { window.__mlLoaded = true; };
+      sc.onerror = tryNext;
+      document.head.appendChild(sc);
+    }
+    tryNext();
+  })();
+</script>
 <script>
   // Load Leaflet asynchronously with a CDN fallback.
   // This does NOT block page parsing — the app renders immediately and
@@ -2211,7 +2239,7 @@
 
   /* ============ LOCATION ============ */
 
-  /* ---------- Base layers: satellite, hybrid, topographic, etc. ---------- */
+  /* ---------- Leaflet base layers ---------- */
   function buildBaseLayers() {
     return {
       "OpenStreetMap": L.tileLayer(
@@ -2223,12 +2251,6 @@
       "OpenTopoMap": L.tileLayer(
         "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
         { maxZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA)" }),
-      "Carto Light": L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        { maxZoom: 19, attribution: "© CARTO, OpenStreetMap" }),
-      "Carto Dark": L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        { maxZoom: 19, attribution: "© CARTO, OpenStreetMap" }),
       "Satellite (Esri)": L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 19, attribution: "© Esri, Maxar" }),
@@ -2244,7 +2266,7 @@
     };
   }
 
-  /* ---------- Colored pin icon factory ---------- */
+  /* ---------- Leaflet pin icon factory ---------- */
   function makePin(color) {
     return L.divIcon({
       className: "",
@@ -2257,8 +2279,6 @@
       popupAnchor: [0, -38]
     });
   }
-  // Lazily create pins — Leaflet loads async, so L may not be ready yet
-  // when this script first runs.
   let PIN_CURRENT = null, PIN_START = null, PIN_END = null;
   function ensurePins() {
     if (PIN_CURRENT) return true;
@@ -2267,42 +2287,6 @@
     PIN_START   = makePin("#4ade80");
     PIN_END     = makePin("#f87171");
     return true;
-  }
-
-  /* ---------- Custom controls (zoom + fullscreen stacked) ---------- */
-  function makeControlStack(map, elId) {
-    const Ctl = L.Control.extend({
-      options: { position: "topleft" },
-      onAdd: function (m) {
-        const wrap = L.DomUtil.create("div", "custom-map-controls");
-        const zin = L.DomUtil.create("button", "map-ctl-btn", wrap);
-        zin.innerHTML = "+";
-        zin.title = "Zoom in";
-        L.DomEvent.disableClickPropagation(zin);
-        L.DomEvent.on(zin, "click", e => { L.DomEvent.stop(e); m.zoomIn(); });
-
-        const zout = L.DomUtil.create("button", "map-ctl-btn", wrap);
-        zout.innerHTML = "&#8722;";
-        zout.title = "Zoom out";
-        L.DomEvent.disableClickPropagation(zout);
-        L.DomEvent.on(zout, "click", e => { L.DomEvent.stop(e); m.zoomOut(); });
-
-        const fs = L.DomUtil.create("button", "map-ctl-btn", wrap);
-        fs.innerHTML = "&#x26F6;";
-        fs.title = "Fullscreen";
-        L.DomEvent.disableClickPropagation(fs);
-        L.DomEvent.on(fs, "click", e => {
-          L.DomEvent.stop(e);
-          const el = $(elId);
-          const isFs = el.classList.toggle("map-fullscreen");
-          fs.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
-          fs.title = isFs ? "Exit fullscreen" : "Fullscreen";
-          setTimeout(() => m.invalidateSize(), 120);
-        });
-        return wrap;
-      }
-    });
-    return new Ctl();
   }
 
   /* ---------- Header ---------- */
@@ -2348,13 +2332,12 @@
       renderSignalBars(bars) +
       '<span style="margin-left:8px;">' + esc(signalText) + '</span>';
 
-    // More-details table (GPS signal removed — it's now in the header)
     const rows = {
-      "Latitude":   loc.Latitude,
-      "Longitude":  loc.Longitude,
-      "Accuracy":   (loc.Accuracy != null) ? loc.Accuracy.toFixed(1) + " m" : "—",
-      "Altitude":   (loc.Altitude != null) ? loc.Altitude.toFixed(1) + " m" : "—",
-      "Speed":      (loc.Speed != null) ? (loc.Speed * 3.6).toFixed(1) + " km/h" : "—"
+      "Latitude":  loc.Latitude,
+      "Longitude": loc.Longitude,
+      "Accuracy":  (loc.Accuracy != null) ? loc.Accuracy.toFixed(1) + " m" : "—",
+      "Altitude":  (loc.Altitude != null) ? loc.Altitude.toFixed(1) + " m" : "—",
+      "Speed":     (loc.Speed != null) ? (loc.Speed * 3.6).toFixed(1) + " km/h" : "—"
     };
     const body = $("locMoreBody");
     body.innerHTML = "";
@@ -2384,9 +2367,13 @@
 
   $("btnLocate").addEventListener("click", () => {
     renderLocHeader();
-    if (trackerMap && currentLat != null && trackerMap.flyTo) {
+    if (currentLat == null || !trackerMap) return;
+    if (trackerMapType === "maplibre" && trackerMap.flyTo) {
       trackerMap.flyTo({ center: [currentLon, currentLat],
         zoom: Math.max(trackerMap.getZoom() || 16, 16) });
+    } else if (trackerMap.setView) {
+      trackerMap.setView([currentLat, currentLon],
+        Math.max(trackerMap.getZoom() || 16, 16));
     }
   });
 
@@ -2395,152 +2382,264 @@
     openExternal("https://www.google.com/maps?q=" + currentLat + "," + currentLon);
   });
 
-  /* ---------- Tracker map ---------- */
-  let trackerMap = null, trackerTrail = null, trackerMarker = null;
-  let trackerPoints = [];
+  /* =========================================================
+     Tracker map — MapLibre GL with Leaflet fallback
+     ========================================================= */
+  let trackerMap = null;
+  let trackerMapType = null;   // "maplibre" | "leaflet"
+  let trackerTrail = null;     // Leaflet polyline (fallback path only)
+  let trackerMarker = null;    // Leaflet marker (fallback path only)
+  let trackerPoints = [];      // normalised as [lng, lat] (GeoJSON order)
 
-  /* ---------- MapLibre GL tracker map ---------- */
-  const ML_VECTOR_STYLES = {
-    "Liberty (3D)": "https://tiles.openfreemap.org/styles/liberty",
-    "Bright (3D)":  "https://tiles.openfreemap.org/styles/bright",
-    "Positron":     "https://tiles.openfreemap.org/styles/positron"
+  const ML_STYLES = {
+    "Carto Voyager":  "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+    "Carto Positron": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "Carto Dark":     "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    "OpenFreeMap Liberty (3D)": "https://tiles.openfreemap.org/styles/liberty",
+    "OpenFreeMap Bright (3D)":  "https://tiles.openfreemap.org/styles/bright",
+    "OSM Raster": {
+      version: 8,
+      sources: { r: { type: "raster", tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256, attribution: "© OSM" } },
+      layers: [{ id: "r", type: "raster", source: "r" }]
+    },
+    "Satellite (Esri)": {
+      version: 8,
+      sources: { r: { type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256, attribution: "© Esri" } },
+      layers: [{ id: "r", type: "raster", source: "r" }]
+    },
+    "Google Streets": {
+      version: 8,
+      sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
+        tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "r", type: "raster", source: "r" }]
+    },
+    "Google Hybrid": {
+      version: 8,
+      sources: { r: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
+        tileSize: 256, attribution: "© Google" } },
+      layers: [{ id: "r", type: "raster", source: "r" }]
+    }
   };
-  const ML_RASTER_STYLES = {
-    "Satellite": { version: 8,
-      sources: { raster: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "© Esri" } },
-      layers: [{ id: "raster", type: "raster", source: "raster" }] },
-    "Google Streets": { version: 8,
-      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
-      layers: [{ id: "raster", type: "raster", source: "raster" }] },
-    "Google Hybrid": { version: 8,
-      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
-      layers: [{ id: "raster", type: "raster", source: "raster" }] },
-    "Google Satellite": { version: 8,
-      sources: { raster: { type: "raster", tiles: ["https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"], tileSize: 256, attribution: "© Google" } },
-      layers: [{ id: "raster", type: "raster", source: "raster" }] }
-  };
+
+  let mlAttempts = 0;
+  const ML_MAX_ATTEMPTS = 30;  // 30 × 150 ms ≈ 4.5 s
 
   function initTrackerMap() {
+    if (trackerMap) { retryResize(); return; }
+
+    // Wait for MapLibre to load, then fall back to Leaflet if it never does
+    if (typeof maplibregl === "undefined") {
+      mlAttempts++;
+      if (mlAttempts < ML_MAX_ATTEMPTS) {
+        setTimeout(initTrackerMap, 150);
+        return;
+      }
+      console.warn("MapLibre unavailable after " + ML_MAX_ATTEMPTS + " attempts — falling back to Leaflet");
+      initTrackerMapLeaflet();
+      return;
+    }
+
+    try {
+      trackerMap = new maplibregl.Map({
+        container: "trackerMap",
+        style: ML_STYLES["Carto Voyager"],
+        center: [0, 0], zoom: 2, pitch: 0, bearing: 0,
+        attributionControl: true
+      });
+      trackerMapType = "maplibre";
+
+      trackerMap.addControl(new maplibregl.NavigationControl({
+        showCompass: true, showZoom: true, visualizePitch: true
+      }), "top-left");
+
+      const fsCtrl = {
+        onAdd: function (map) {
+          const div = document.createElement("div");
+          div.className = "maplibregl-ctrl maplibregl-ctrl-group";
+          const btn = document.createElement("button");
+          btn.className = "maplibregl-ctrl-icon";
+          btn.type = "button";
+          btn.title = "Fullscreen";
+          btn.style.fontSize = "18px";
+          btn.innerHTML = "&#x26F6;";
+          btn.addEventListener("click", function () {
+            const el = document.getElementById("trackerMap");
+            const isFs = el.classList.toggle("map-fullscreen");
+            btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
+            btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
+            setTimeout(() => map.resize(), 140);
+          });
+          div.appendChild(btn);
+          return div;
+        }
+      };
+      trackerMap.addControl(fsCtrl, "top-left");
+
+      const layerCtrl = {
+        onAdd: function (map) {
+          const div = document.createElement("div");
+          div.className = "maplibregl-ctrl maplibregl-ctrl-group";
+          div.style.position = "relative";
+          const btn = document.createElement("button");
+          btn.className = "maplibregl-ctrl-icon";
+          btn.type = "button";
+          btn.title = "Layers";
+          btn.style.fontSize = "18px";
+          btn.innerHTML = "&#9776;";
+          btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const existing = div.querySelector(".ml-layer-menu");
+            if (existing) { existing.remove(); return; }
+            const menu = document.createElement("div");
+            menu.className = "ml-layer-menu";
+            Object.keys(ML_STYLES).forEach(function (k) {
+              const b = document.createElement("button");
+              b.textContent = k;
+              b.addEventListener("click", function () {
+                try { map.setStyle(ML_STYLES[k]); }
+                catch (err) { console.warn("style error", err); }
+                menu.remove();
+              });
+              menu.appendChild(b);
+            });
+            div.appendChild(menu);
+          });
+          div.appendChild(btn);
+          return div;
+        }
+      };
+      trackerMap.addControl(layerCtrl, "top-right");
+
+      trackerMap.on("error", function (e) {
+        console.warn("MapLibre error:", e && e.error ? e.error.message : e);
+      });
+
+      trackerMap.on("load", function () {
+        try {
+          trackerMap.addSource("trail", {
+            type: "geojson",
+            data: { type: "Feature", geometry: { type: "LineString", coordinates: [] } }
+          });
+          trackerMap.addLayer({
+            id: "trail", type: "line", source: "trail",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#7c8cff", "line-width": 4, "line-opacity": 0.9 }
+          });
+          trackerMap.addSource("marker", {
+            type: "geojson",
+            data: { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } }
+          });
+          trackerMap.addLayer({
+            id: "marker", type: "circle", source: "marker",
+            paint: {
+              "circle-radius": 8,
+              "circle-color": "#7c8cff",
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 3
+            }
+          });
+
+          const active = safeJSON(Android.getActiveSession(), null);
+          if (active && active.points && active.points.length) {
+            trackerPoints = active.points.map(p => [p[1], p[0]]);
+            trackerMap.getSource("trail").setData({
+              type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
+            });
+            const last = trackerPoints[trackerPoints.length - 1];
+            trackerMap.getSource("marker").setData({
+              type: "Feature", geometry: { type: "Point", coordinates: last }
+            });
+            trackerMap.jumpTo({ center: last, zoom: 16 });
+          } else {
+            const loc = safeJSON(Android.getLocationDetail(), {});
+            if (loc && typeof loc.Latitude === "number") {
+              const ll = [loc.Longitude, loc.Latitude];
+              trackerMap.getSource("marker").setData({
+                type: "Feature", geometry: { type: "Point", coordinates: ll }
+              });
+              trackerMap.jumpTo({ center: ll, zoom: 16 });
+            }
+          }
+          retryResize();
+        } catch (e) {
+          console.warn("MapLibre load handler error:", e);
+        }
+      });
+    } catch (e) {
+      console.warn("MapLibre init failed:", e);
+      trackerMap = null;
+      initTrackerMapLeaflet();
+    }
+  }
+
+  function initTrackerMapLeaflet() {
     if (trackerMap) return;
-    if (typeof maplibregl === "undefined") { setTimeout(initTrackerMap, 150); return; }
+    if (typeof L === "undefined") { setTimeout(initTrackerMapLeaflet, 150); return; }
+    if (!ensurePins()) { setTimeout(initTrackerMapLeaflet, 150); return; }
 
-    trackerMap = new maplibregl.Map({
-      container: "trackerMap",
-      style: ML_VECTOR_STYLES["Liberty (3D)"],
-      center: [0, 0], zoom: 2, pitch: 0, bearing: 0,
-      attributionControl: true
-    });
+    trackerMap = L.map("trackerMap", {
+      zoomControl: false, attributionControl: true
+    }).setView([0, 0], 2);
+    trackerMapType = "leaflet";
 
-    trackerMap.addControl(new maplibregl.NavigationControl({
-      showCompass: true, showZoom: true, visualizePitch: true
-    }), "top-left");
+    const baseLayers = buildBaseLayers();
+    baseLayers["OpenStreetMap"].addTo(trackerMap);
+    L.control.layers(baseLayers, null, { position: "topright", collapsed: true }).addTo(trackerMap);
+    L.control.zoom({ position: "topleft" }).addTo(trackerMap);
 
-    const fsCtrl = {
-      onAdd: function (map) {
-        const div = document.createElement("div");
-        div.className = "maplibregl-ctrl maplibregl-ctrl-group";
-        const btn = document.createElement("button");
-        btn.className = "maplibregl-ctrl-icon";
-        btn.type = "button"; btn.title = "Fullscreen";
-        btn.style.fontSize = "18px"; btn.innerHTML = "&#x26F6;";
-        btn.addEventListener("click", function () {
-          const el = document.getElementById("trackerMap");
+    const FsCtl = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd: function () {
+        const div = L.DomUtil.create("div", "");
+        div.innerHTML = '<button class="fs-btn" title="Fullscreen">&#x26F6;</button>';
+        const btn = div.querySelector("button");
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.on(btn, "click", function (e) {
+          L.DomEvent.stop(e);
+          const el = $("trackerMap");
           const isFs = el.classList.toggle("map-fullscreen");
           btn.innerHTML = isFs ? "&#x2715;" : "&#x26F6;";
-          btn.title = isFs ? "Exit fullscreen" : "Fullscreen";
-          setTimeout(() => map.resize(), 140);
+          setTimeout(() => trackerMap.invalidateSize(), 140);
         });
-        div.appendChild(btn);
         return div;
       }
-    };
-    trackerMap.addControl(fsCtrl, "top-left");
+    });
+    trackerMap.addControl(new FsCtl());
 
-    const layerCtrl = {
-      onAdd: function (map) {
-        const div = document.createElement("div");
-        div.className = "maplibregl-ctrl maplibregl-ctrl-group";
-        div.style.position = "relative";
-        const btn = document.createElement("button");
-        btn.className = "maplibregl-ctrl-icon";
-        btn.type = "button"; btn.title = "Layers";
-        btn.style.fontSize = "18px"; btn.innerHTML = "&#9776;";
-        btn.addEventListener("click", function (e) {
-          e.stopPropagation();
-          const existing = div.querySelector(".ml-layer-menu");
-          if (existing) { existing.remove(); return; }
-          const menu = document.createElement("div");
-          menu.className = "ml-layer-menu";
-          Object.keys(ML_VECTOR_STYLES).forEach(function (k) {
-            const b = document.createElement("button");
-            b.textContent = k;
-            b.addEventListener("click", function () {
-              map.setStyle(ML_VECTOR_STYLES[k]); menu.remove();
-            });
-            menu.appendChild(b);
-          });
-          Object.keys(ML_RASTER_STYLES).forEach(function (k) {
-            const b = document.createElement("button");
-            b.textContent = k;
-            b.addEventListener("click", function () {
-              map.setStyle(ML_RASTER_STYLES[k]); menu.remove();
-            });
-            menu.appendChild(b);
-          });
-          div.appendChild(menu);
-        });
-        div.appendChild(btn);
-        return div;
+    trackerTrail = L.polyline([], { color: "#7c8cff", weight: 4, opacity: 0.9 }).addTo(trackerMap);
+    trackerMarker = L.marker([0, 0], { icon: PIN_CURRENT }).addTo(trackerMap);
+
+    const active = safeJSON(Android.getActiveSession(), null);
+    if (active && active.points && active.points.length) {
+      trackerPoints = active.points.map(p => [p[1], p[0]]);
+      trackerTrail.setLatLngs(active.points.map(p => [p[0], p[1]]));
+      const last = active.points[active.points.length - 1];
+      trackerMarker.setLatLng([last[0], last[1]]);
+      trackerMap.setView([last[0], last[1]], 16);
+    } else {
+      const loc = safeJSON(Android.getLocationDetail(), {});
+      if (loc && typeof loc.Latitude === "number") {
+        trackerMarker.setLatLng([loc.Latitude, loc.Longitude]);
+        trackerMap.setView([loc.Latitude, loc.Longitude], 16);
       }
-    };
-    trackerMap.addControl(layerCtrl, "top-right");
+    }
+    retryResize();
+  }
 
-    trackerMap.on("load", function () {
-      trackerMap.addSource("trail", {
-        type: "geojson",
-        data: { type: "Feature", geometry: { type: "LineString", coordinates: [] } }
-      });
-      trackerMap.addLayer({
-        id: "trail", type: "line", source: "trail",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#7c8cff", "line-width": 4, "line-opacity": 0.9 }
-      });
-      trackerMap.addSource("marker", {
-        type: "geojson",
-        data: { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } }
-      });
-      trackerMap.addLayer({
-        id: "marker", type: "circle", source: "marker",
-        paint: {
-          "circle-radius": 8, "circle-color": "#7c8cff",
-          "circle-stroke-color": "#ffffff", "circle-stroke-width": 3
-        }
-      });
-
-      const active = safeJSON(Android.getActiveSession(), null);
-      if (active && active.points && active.points.length) {
-        trackerPoints = active.points.map(function (p) { return [p[1], p[0]]; });
-        trackerMap.getSource("trail").setData({
-          type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
-        });
-        const last = trackerPoints[trackerPoints.length - 1];
-        trackerMap.getSource("marker").setData({
-          type: "Feature", geometry: { type: "Point", coordinates: last }
-        });
-        trackerMap.jumpTo({ center: last, zoom: 16 });
-      } else {
-        const loc = safeJSON(Android.getLocationDetail(), {});
-        if (loc && typeof loc.Latitude === "number") {
-          const ll = [loc.Longitude, loc.Latitude];
-          trackerMap.getSource("marker").setData({
-            type: "Feature", geometry: { type: "Point", coordinates: ll }
-          });
-          trackerMap.jumpTo({ center: ll, zoom: 16 });
-        }
-      }
+  function retryResize() {
+    [100, 300, 600, 1200, 2500, 4000].forEach(d => {
+      setTimeout(() => {
+        if (!trackerMap) return;
+        if (trackerMap.resize) trackerMap.resize();
+        else if (trackerMap.invalidateSize) trackerMap.invalidateSize();
+      }, d);
     });
   }
 
+  /* ---------- Tracking controls ---------- */
   function updateTrackingUI() {
     let running = false;
     try { running = Android.isTrackingActive(); } catch (e) {}
@@ -2551,10 +2650,20 @@
   $("btnTrackStart").addEventListener("click", () => {
     initTrackerMap();
     trackerPoints = [];
-    if (trackerTrail) trackerTrail.setLatLngs([]);
-    // Fly to current position immediately
-    if (currentLat != null && trackerMap && trackerMap.jumpTo) {
-      trackerMap.jumpTo({ center: [currentLon, currentLat], zoom: 17 });
+    if (trackerMapType === "maplibre" && trackerMap && trackerMap.getSource
+        && trackerMap.getSource("trail")) {
+      trackerMap.getSource("trail").setData({
+        type: "Feature", geometry: { type: "LineString", coordinates: [] }
+      });
+    } else if (trackerTrail) {
+      trackerTrail.setLatLngs([]);
+    }
+    if (currentLat != null && trackerMap) {
+      if (trackerMapType === "maplibre" && trackerMap.jumpTo) {
+        trackerMap.jumpTo({ center: [currentLon, currentLat], zoom: 17 });
+      } else if (trackerMap.setView) {
+        trackerMap.setView([currentLat, currentLon], 17);
+      }
     }
     Android.startTrackingService();
     setTimeout(updateTrackingUI, 400);
@@ -2564,8 +2673,7 @@
     const ok = await showConfirm({
       title: "Stop tracking?",
       message: "The current session will be saved to history.",
-      confirmText: "Stop",
-      danger: true
+      confirmText: "Stop", danger: true
     });
     if (!ok) return;
     Android.stopTrackingService();
@@ -2574,20 +2682,29 @@
 
   window.onTrackingPoint = function (p) {
     if (!trackerMap) { initTrackerMap(); return; }
-    if (!trackerMap.getSource || !trackerMap.getSource("trail")) return;
-    const ll = [p.lon, p.lat];
-    trackerPoints.push(ll);
-    trackerMap.getSource("trail").setData({
-      type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
-    });
-    trackerMap.getSource("marker").setData({
-      type: "Feature", geometry: { type: "Point", coordinates: ll }
-    });
-    const z = trackerMap.getZoom();
-    if (z < 15) trackerMap.jumpTo({ center: ll, zoom: 17 });
-    else trackerMap.panTo(ll);
+    if (trackerMapType === "maplibre") {
+      if (!trackerMap.getSource || !trackerMap.getSource("trail")) return;
+      const ll = [p.lon, p.lat];
+      trackerPoints.push(ll);
+      trackerMap.getSource("trail").setData({
+        type: "Feature", geometry: { type: "LineString", coordinates: trackerPoints }
+      });
+      trackerMap.getSource("marker").setData({
+        type: "Feature", geometry: { type: "Point", coordinates: ll }
+      });
+      const z = trackerMap.getZoom();
+      if (z < 15) trackerMap.jumpTo({ center: ll, zoom: 17 });
+      else trackerMap.panTo(ll);
+    } else {
+      if (!trackerTrail) return;
+      trackerPoints.push([p.lon, p.lat]);
+      trackerTrail.setLatLngs(trackerPoints.map(q => [q[1], q[0]]));
+      if (trackerMarker) trackerMarker.setLatLng([p.lat, p.lon]);
+      if (trackerMap.getZoom() < 15) trackerMap.setView([p.lat, p.lon], 17);
+      else trackerMap.panTo([p.lat, p.lon]);
+    }
     renderLocHeader();
-  };;
+  };
 
   window.onTrackingStopped = function () {
     updateTrackingUI();
@@ -2612,8 +2729,7 @@
   function renderSessionsList() {
     const arr = safeJSON(Android.getSessions(), []);
     $("sessionsCount").textContent = arr.length
-      ? "(" + arr.length + " session" + (arr.length === 1 ? "" : "s") + ")"
-      : "";
+      ? "(" + arr.length + " session" + (arr.length === 1 ? "" : "s") + ")" : "";
     if (!arr.length) {
       $("sessionsList").innerHTML =
         '<div class="empty">No sessions yet. Tap "Start tracking my location" to record one.</div>';
@@ -2642,15 +2758,14 @@
     const ok = await showConfirm({
       title: "Clear all sessions?",
       message: "Every recorded tracking session will be permanently deleted.\n\nThis cannot be undone.",
-      confirmText: "Delete",
-      danger: true
+      confirmText: "Delete", danger: true
     });
     if (!ok) return;
     Android.clearSessions();
     renderSessionsList();
   });
 
-  /* ---------- Session detail ---------- */
+  /* ---------- Session detail (Leaflet) ---------- */
   let sessionMap = null, sessionTrail = null;
   let sessionStartMarker = null, sessionEndMarker = null;
 
@@ -2659,15 +2774,12 @@
     if (typeof L === "undefined") { setTimeout(initSessionMap, 150); return; }
     if (!ensurePins()) { setTimeout(initSessionMap, 150); return; }
     sessionMap = L.map("sessionMap", {
-      zoomControl: false,
-      attributionControl: true
+      zoomControl: false, attributionControl: true
     }).setView([0, 0], 2);
     const baseLayers = buildBaseLayers();
     baseLayers["OpenStreetMap"].addTo(sessionMap);
-    L.control.layers(baseLayers, null, {
-      position: "topright", collapsed: true
-    }).addTo(sessionMap);
-    sessionMap.addControl(makeControlStack(sessionMap, "sessionMap"));
+    L.control.layers(baseLayers, null, { position: "topright", collapsed: true }).addTo(sessionMap);
+    L.control.zoom({ position: "topleft" }).addTo(sessionMap);
     sessionTrail = L.polyline([], { color: "#4ade80", weight: 4, opacity: 0.9 }).addTo(sessionMap);
   }
 
@@ -2684,15 +2796,10 @@
 
     $("sessionTitle").textContent = "Session " + id.slice(-6);
     $("sessionSubtitle").textContent = start;
-
     renderDL($("sessionStats"), {
-      "Start time": start,
-      "End time":   end,
-      "Duration":   dur,
-      "Distance":   dist,
-      "Max speed":  maxSpd,
-      "Avg speed":  avgSpd,
-      "Points":     points.length
+      "Start time": start, "End time": end, "Duration": dur,
+      "Distance": dist, "Max speed": maxSpd, "Avg speed": avgSpd,
+      "Points": points.length
     });
 
     $("locViewRoot").style.display = "none";
@@ -2727,9 +2834,9 @@
     if (b.dataset.tab === "loc") {
       if (!locTabInited) {
         locTabInited = true;
-        setTimeout(initTrackerMap, 150);
-      } else if (trackerMap && trackerMap.resize) {
-        setTimeout(() => trackerMap.resize(), 60);
+        setTimeout(initTrackerMap, 200);
+      } else {
+        retryResize();
       }
       startLocAutoRefresh();
       renderSessionsList();
