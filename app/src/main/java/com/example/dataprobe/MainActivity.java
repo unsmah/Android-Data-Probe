@@ -95,6 +95,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
@@ -1976,7 +1977,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     UUID widevine = new UUID(0xedef8ba979d64aceL, 0xa3c827dcd51d21edL);
                     MediaDrm drm = new MediaDrm(widevine);
-                    byte[] level = drm.getPropertyByteArray(MediaDrm.PROPERTY_SECURITY_LEVEL);
+                    byte[] level = drm.getPropertyByteArray("securityLevel");
                     String lvl = (level != null && level.length > 0) ? String.valueOf((char) level[0]) : "?";
                     String pretty = "1".equals(lvl) ? "L1 (hardware-secure, HD/4K capable)"
                                  : "3".equals(lvl) ? "L3 (software, SD only)"
