@@ -1546,6 +1546,30 @@
             if (sec.fn === "getSensorArray" || sec.fn === "getCellularDetails"
                 || sec.fn === "getCameraHardware") {
               // These return structured JSON — render directly
+              if (sec.fn === "getCellularDetails") {
+                body.innerHTML = "";
+                if (data.error) {
+                  body.innerHTML = '<div class="kv-empty">' + esc(data.error) + '</div>';
+                  return;
+                }
+                const cells = data.cells || [];
+                if (!cells.length) {
+                  body.innerHTML = '<div class="kv-empty">No cell info available.</div>';
+                  return;
+                }
+                cells.forEach((cell, idx) => {
+                  const hdr = document.createElement("div");
+                  hdr.style.cssText = "padding:12px 18px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);";
+                  hdr.textContent = (cell.Type || "Cell") +
+                    (cell.Registered ? " · registered" : "") +
+                    "  #" + (idx + 1);
+                  body.appendChild(hdr);
+                  const tbl = document.createElement("div");
+                  body.appendChild(tbl);
+                  renderKV(tbl, cell);
+                });
+                return;
+              }
               if (Array.isArray(data)) {
                 // Sensors / cells array
                 body.innerHTML = "";
