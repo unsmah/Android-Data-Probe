@@ -2047,7 +2047,10 @@ public class MainActivity extends AppCompatActivity {
                 File dataDir = Environment.getDataDirectory();
                 StatFs stat = new StatFs(dataDir.getPath());
                 String fsType = "unknown";
-                try { fsType = stat.getFileSystemType(); } catch (Exception ignored) {}
+                try {
+                    java.lang.reflect.Method m = StatFs.class.getMethod("getFileSystemType");
+                    fsType = (String) m.invoke(stat);
+                } catch (Exception ignored) {}
                 o.put("Data filesystem", fsType);
                 String secondary = System.getenv("SECONDARY_STORAGE");
                 o.put("SECONDARY_STORAGE", secondary != null ? secondary : "(none)");
@@ -2165,7 +2168,7 @@ public class MainActivity extends AppCompatActivity {
                 case AudioDeviceInfo.TYPE_BUILTIN_MIC: return "Built-in microphone";
                 case AudioDeviceInfo.TYPE_FM_TUNER: return "FM tuner";
                 case AudioDeviceInfo.TYPE_TV_TUNER: return "TV tuner";
-                case AudioDeviceInfo.TYPE_TELEPHONY_LINE: return "Telephony line";
+                case 24: return "Telephony line";
                 case AudioDeviceInfo.TYPE_IP: return "IP";
                 case AudioDeviceInfo.TYPE_BUS: return "BUS";
                 case AudioDeviceInfo.TYPE_REMOTE_SUBMIX: return "Remote submix";
@@ -2182,15 +2185,15 @@ public class MainActivity extends AppCompatActivity {
             try {
                 AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                 try {
-                    String outCh = am.getProperty(AudioManager.PROPERTY_OUTPUT_CHANNELS);
+                    String outCh = am.getProperty("android.media.property.OUTPUT_CHANNELS");
                     o.put("Output channels", outCh != null ? outCh : "unknown");
                 } catch (Exception ignored) {}
                 try {
-                    String rate = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE);
+                    String rate = am.getProperty("android.media.property.OUTPUT_SAMPLE_RATE");
                     o.put("Native output rate", rate != null ? rate + " Hz" : "unknown");
                 } catch (Exception ignored) {}
                 try {
-                    String fpb = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
+                    String fpb = am.getProperty("android.media.property.OUTPUT_FRAMES_PER_BUFFER");
                     o.put("Frames per buffer", fpb != null ? fpb : "unknown");
                 } catch (Exception ignored) {}
                 try {
@@ -2287,7 +2290,7 @@ public class MainActivity extends AppCompatActivity {
                 case TelephonyManager.SIM_STATE_PERM_DISABLED: return "Permanently disabled";
                 case TelephonyManager.SIM_STATE_CARD_IO_ERROR: return "Card I/O error";
                 case TelephonyManager.SIM_STATE_CARD_RESTRICTED: return "Card restricted";
-                case TelephonyManager.SIM_STATE_LOADED: return "Loaded";
+                case 10: return "Loaded";
                 default: return "Unknown (" + s + ")";
             }
         }
