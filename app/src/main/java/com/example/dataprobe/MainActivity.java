@@ -1685,14 +1685,122 @@ public class MainActivity extends AppCompatActivity {
             return String.format(Locale.US, "%.2f %s", bytes / Math.pow(1024, i), u[i]);
         }
 
+        /* ==================================================
+           Marketing name resolution
+           ================================================== */
+
+        private String readSystemProp(String key) {
+            try {
+                Class<?> sp = Class.forName("android.os.SystemProperties");
+                java.lang.reflect.Method get = sp.getMethod("get", String.class);
+                Object v = get.invoke(null, key);
+                return v != null ? v.toString() : null;
+            } catch (Exception e) { return null; }
+        }
+
+        private String resolveMarketingName() {
+            // 1) Try common hidden system properties (varies by OEM)
+            String[] keys = {
+                "ro.product.marketname",
+                "ro.vendor.product.marketname",
+                "ro.product.odm.marketname",
+                "ro.product.system.marketname",
+                "ro.config.marketing_name",
+                "ro.product.model.marketname"
+            };
+            for (String k : keys) {
+                String v = readSystemProp(k);
+                if (v != null && !v.isEmpty() && !"unknown".equalsIgnoreCase(v)) return v;
+            }
+
+            // 2) Small lookup table for codes we know
+            String code = safeStr(Build.MODEL).toUpperCase(Locale.US);
+            java.util.Map<String, String> table = new java.util.HashMap<>();
+            // Xiaomi / Redmi — recent models
+            table.put("24090RA29G", "Redmi Note 14 Pro 5G");
+            table.put("24090RA29C", "Redmi Note 14 Pro 5G");
+            table.put("24090RA29I", "Redmi Note 14 Pro 5G");
+            table.put("24094RAD4G", "Redmi Note 14 Pro+ 5G");
+            table.put("24094RAD4C", "Redmi Note 14 Pro+ 5G");
+            table.put("24094RAD4I", "Redmi Note 14 Pro+ 5G");
+            table.put("2312DRA50G", "Redmi Note 13 Pro 5G");
+            table.put("2312DRA50C", "Redmi Note 13 Pro 5G");
+            table.put("2312DRA50I", "Redmi Note 13 Pro 5G");
+            table.put("23090RA98G", "Redmi Note 13 Pro+ 5G");
+            table.put("23090RA98C", "Redmi Note 13 Pro+ 5G");
+            table.put("23090RA98I", "Redmi Note 13 Pro+ 5G");
+            table.put("22101316G", "Redmi Note 12 Pro 5G");
+            table.put("22101316C", "Redmi Note 12 Pro 5G");
+            table.put("22101316I", "Redmi Note 12 Pro 5G");
+            table.put("23021RAAEG", "Redmi 12");
+            table.put("23053RN02A", "Redmi 12C");
+            table.put("23124RA7EO", "Redmi 13C");
+            table.put("23106RN0DA", "Redmi 13C 5G");
+            table.put("2409BRN2CG", "Redmi 14C");
+            table.put("2311DRK48G", "Redmi K70 Pro");
+            table.put("2311DRK48C", "Redmi K70 Pro");
+            table.put("23117RK66G", "Redmi K70");
+            table.put("23013RK75C", "Redmi K60");
+            // Xiaomi (Mi)
+            table.put("23127PN0CG", "Xiaomi 14");
+            table.put("23127PN0CC", "Xiaomi 14");
+            table.put("23127PN0CI", "Xiaomi 14");
+            table.put("23116PN5BG", "Xiaomi 14 Pro");
+            table.put("23116PN5BC", "Xiaomi 14 Pro");
+            table.put("24018RPACG", "Xiaomi 14 Ultra");
+            table.put("24018RPACC", "Xiaomi 14 Ultra");
+            table.put("2304FPN6DC", "Xiaomi 13 Ultra");
+            table.put("2211133G", "Xiaomi 13");
+            table.put("2211133C", "Xiaomi 13");
+            table.put("2201123G", "Xiaomi 12");
+            // Samsung — Build.MODEL often contains the code already clean
+            table.put("SM-S928B", "Galaxy S24 Ultra");
+            table.put("SM-S921B", "Galaxy S24");
+            table.put("SM-S918B", "Galaxy S23 Ultra");
+            table.put("SM-S911B", "Galaxy S23");
+            table.put("SM-A556B", "Galaxy A55");
+            table.put("SM-A356B", "Galaxy A35");
+            table.put("SM-A256B", "Galaxy A25");
+            // Google
+            table.put("PIXEL 9 PRO XL", "Pixel 9 Pro XL");
+            table.put("PIXEL 9 PRO", "Pixel 9 Pro");
+            table.put("PIXEL 9", "Pixel 9");
+            table.put("PIXEL 8 PRO", "Pixel 8 Pro");
+            table.put("PIXEL 8", "Pixel 8");
+            table.put("PIXEL 7 PRO", "Pixel 7 Pro");
+            table.put("PIXEL 7", "Pixel 7");
+            // OnePlus
+            table.put("CPH2581", "OnePlus 12");
+            table.put("CPH2573", "OnePlus 12R");
+            table.put("CPH2449", "OnePlus 11");
+            // Oppo / Realme — many codes, best-effort
+            table.put("CPH2525", "Oppo Reno 11 Pro");
+            table.put("RMX3823", "Realme GT 5");
+            // Huawei
+            table.put("ELS-NX9", "Huawei P40 Pro");
+            table.put("VOG-L29", "Huawei P30 Pro");
+
+            if (table.containsKey(code)) return table.get(code);
+            return null;
+        }
+
         @JavascriptInterface
         public String getDeviceOverview() {
             JSONObject o = new JSONObject();
             try {
-                o.put("DeviceName", safeStr(Build.MODEL));
+                String marketing = resolveMarketingName();
+                String modelCode = safeStr(Build.MODEL);
                 o.put("Manufacturer", safeStr(Build.MANUFACTURER));
                 o.put("Brand", safeStr(Build.BRAND));
-                o.put("Model", safeStr(Build.MODEL));
+                o.put("Model", modelCode);
+                o.put("ModelCode", modelCode);
+                if (marketing != null && !marketing.isEmpty()) {
+                    o.put("DeviceName", marketing);
+                    o.put("MarketingName", marketing);
+                } else {
+                    o.put("DeviceName", safeStr(Build.MANUFACTURER) + " " + modelCode);
+                    o.put("MarketingName", "");
+                }
                 try {
                     File dataDir = Environment.getDataDirectory();
                     StatFs stat = new StatFs(dataDir.getPath());
