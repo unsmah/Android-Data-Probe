@@ -710,6 +710,147 @@
     color: var(--accent);
     box-shadow: 0 0 0 1px var(--border-hi) inset;
   }
+
+  /* ===== Home: hero card ===== */
+  .hero-card {
+    background: linear-gradient(160deg, #1a1f3a 0%, #12151f 60%);
+    border: 1px solid #2a3050;
+    border-radius: 18px;
+    padding: 20px 20px 18px;
+    margin-bottom: 18px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  }
+  .hero-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    color: #fff;
+    margin-bottom: 3px;
+    word-break: break-word;
+  }
+  .hero-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+    margin-bottom: 18px;
+  }
+  .hero-stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 3px;
+  }
+  .hero-stat-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #d5dae8;
+    font-family: ui-monospace, monospace;
+    word-break: break-word;
+  }
+  .storage-bar-wrap {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 12px 14px;
+  }
+  .storage-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .storage-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .storage-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7c8cff, #b47cff);
+    border-radius: 6px;
+    transition: width .4s ease;
+    width: 0%;
+  }
+  .storage-bar-fill.warn { background: linear-gradient(90deg, #f5c76e, #f87171); }
+  .storage-bar-fill.danger { background: linear-gradient(90deg, #f87171, #d63a3a); }
+
+  /* ===== Home: category toggles ===== */
+  .home-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: background .15s;
+  }
+  .home-section > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 15px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #d5dae8;
+  }
+  .home-section > summary::-webkit-details-marker { display: none; }
+  .home-section > summary .section-icon {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: rgba(124,140,255,0.14);
+    border: 1px solid rgba(124,140,255,0.24);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: #a8b2ff;
+  }
+  .home-section > summary .section-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .home-section > summary .section-title { flex: 1; min-width: 0; }
+  .home-section > summary .section-count {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+  .home-section > summary::after {
+    content: "▾";
+    color: var(--text-faint);
+    font-size: 12px;
+    transition: transform .18s;
+  }
+  .home-section[open] > summary::after { transform: rotate(180deg); }
+  .home-section[open] > summary { border-bottom: 1px solid var(--border); background: var(--card2); }
+
+  .home-section .section-body {
+    padding: 4px 0 8px;
+  }
+  .home-section .kv-table { border: none; border-radius: 0; background: transparent; }
+  .home-section .kv-table tr:last-child { border-bottom: none; }
+  .home-section .kv-table td { padding: 10px 18px; }
+  .home-section .kv-table .kv-label { color: var(--text-dim); width: 44%; }
+
+  /* Loading skeleton */
+  .skeleton {
+    display: inline-block;
+    background: linear-gradient(90deg, #1a1f2a, #232838, #1a1f2a);
+    background-size: 200% 100%;
+    animation: skeleton 1.4s ease-in-out infinite;
+    color: transparent;
+    border-radius: 4px;
+    min-width: 60px;
+  }
+  @keyframes skeleton {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 </style>
 </head>
 <body>
@@ -726,14 +867,45 @@
 
 <main>
   <section id="tab-home" class="tab active">
-    <h1>Data Probe</h1>
-    <p class="subtitle">Native Android information, gathered locally.</p>
-    <div class="oui-loader" id="ouiLoader" style="display:none;">
-      <span class="spinner"></span>
-      <span id="ouiLoaderText">Downloading router manufacturer database…</span>
+
+    <!-- Hero: About my device -->
+    <div id="homeHero" class="hero-card">
+      <div class="hero-name" id="heroName">Device</div>
+      <div class="hero-sub" id="heroSub">Loading…</div>
+
+      <div class="hero-grid">
+        <div class="hero-stat">
+          <div class="hero-stat-label">Storage</div>
+          <div class="hero-stat-value" id="heroStorageText">—</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">RAM</div>
+          <div class="hero-stat-value" id="heroRamText">—</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Cameras</div>
+          <div class="hero-stat-value" id="heroCamText">—</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Android</div>
+          <div class="hero-stat-value" id="heroAndroidText">—</div>
+        </div>
+      </div>
+
+      <div class="storage-bar-wrap">
+        <div class="storage-bar-labels">
+          <span>Storage used</span>
+          <span id="heroStoragePercent">—</span>
+        </div>
+        <div class="storage-bar"><div class="storage-bar-fill" id="heroStorageBar"></div></div>
+        <div class="storage-bar-labels" style="margin-top:6px;">
+          <span id="heroStorageUsed">—</span>
+          <span id="heroStorageFree">—</span>
+        </div>
+      </div>
     </div>
-    <h2>Device &amp; OS</h2>
-    <div id="devInfo"></div>
+
+    <div id="homeToggles"></div>
   </section>
 
   <section id="tab-wifi" class="tab">
@@ -1241,7 +1413,226 @@
   }
 
   /* ============ HOME ============ */
-  renderDL($("devInfo"), safeJSON(Android.getDeviceInfo(), {}));
+  (function buildHome() {
+    const $ = id => document.getElementById(id);
+    const safeJSON = (s, fb) => { try { return JSON.parse(s); } catch { return fb; } };
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+      ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+    function renderKV(container, obj) {
+      if (!container) return;
+      container.innerHTML = "";
+      const table = document.createElement("table");
+      table.className = "kv-table";
+      for (const [k, v] of Object.entries(obj)) {
+        const tr = document.createElement("tr");
+        const tdL = document.createElement("td");
+        tdL.className = "kv-label"; tdL.textContent = k;
+        const tdV = document.createElement("td");
+        tdV.className = "kv-value";
+        if (v == null) {
+          tdV.textContent = "—";
+        } else if (Array.isArray(v)) {
+          if (!v.length) { tdV.textContent = "(none)"; }
+          else if (v.every(x => typeof x !== "object" || x === null)) {
+            tdV.textContent = v.join(", ");
+          } else {
+            tdV.innerHTML = v.map(item => {
+              if (typeof item === "object") {
+                return Object.entries(item)
+                  .map(([ik, iv]) => `<b>${esc(ik)}:</b> ${esc(String(iv))}`)
+                  .join(" · ");
+              }
+              return esc(String(item));
+            }).join("<br>");
+          }
+        } else if (typeof v === "object") {
+          tdV.innerHTML = Object.entries(v)
+            .map(([ik, iv]) => `<b>${esc(ik)}:</b> ${esc(String(iv))}`)
+            .join("<br>");
+        } else {
+          tdV.textContent = String(v);
+        }
+        tr.append(tdL, tdV);
+        table.appendChild(tr);
+      }
+      container.appendChild(table);
+    }
+
+    const ICONS = {
+      software: '<svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
+      hardware: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
+      battery: '<svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2"/><path d="M11 9l-2 6h4l-2 6"/></svg>',
+      display: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>',
+      network: '<svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="0.6" fill="currentColor"/></svg>',
+      camera: '<svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+      drm: '<svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+      storage: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="2.5"/><path d="M4 5.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6M4 11.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/></svg>',
+      audio: '<svg viewBox="0 0 24 24"><path d="M3 17v-5a9 9 0 0118 0v5"/><path d="M3 15a2 2 0 012-2h1v6H5a2 2 0 01-2-2z"/><path d="M21 15a2 2 0 00-2-2h-1v6h1a2 2 0 002-2z"/></svg>',
+      sensors: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>',
+      sim: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/><rect x="8" y="12" width="8" height="6" rx="1"/></svg>',
+      signal: '<svg viewBox="0 0 24 24"><path d="M2 20h2v-4H2zM7 20h2v-7H7zM12 20h2V9h-2zM17 20h2V5h-2z"/></svg>'
+    };
+
+    /* -------- Hero -------- */
+    try {
+      const dev = safeJSON(Android.getDeviceOverview(), {});
+      $("heroName").textContent = (dev.Manufacturer || "") + " " + (dev.Model || "Unknown");
+      $("heroSub").textContent = (dev.Brand || "") + " · " + (dev.Model || "");
+
+      if (dev.Storage) {
+        $("heroStorageText").textContent = dev.Storage.TotalText;
+        $("heroStoragePercent").textContent = dev.Storage.Percent + "% used";
+        $("heroStorageUsed").textContent = dev.Storage.UsedText + " used";
+        $("heroStorageFree").textContent = dev.Storage.FreeText + " free";
+        const bar = $("heroStorageBar");
+        bar.style.width = dev.Storage.Percent + "%";
+        bar.className = "storage-bar-fill" +
+          (dev.Storage.Percent > 90 ? " danger" : dev.Storage.Percent > 75 ? " warn" : "");
+      }
+      if (dev.RAM) $("heroRamText").textContent = dev.RAM.TotalText;
+      if (dev.CameraCount) $("heroCamText").textContent = dev.CameraCount + " lenses";
+      if (dev.AndroidVersion) $("heroAndroidText").textContent = "Android " + dev.AndroidVersion;
+    } catch (e) { console.warn(e); }
+
+    /* -------- Category toggles -------- */
+    const SECTIONS = [
+      { id: "software", title: "Software & Version", icon: "software", fn: "getSoftwareDetails" },
+      { id: "hardware", title: "Hardware", icon: "hardware", fn: "getHardwareDetails" },
+      { id: "battery", title: "Battery & Power", icon: "battery", fn: "getBatteryDetails" },
+      { id: "display", title: "Display & Graphics", icon: "display", fn: "getDisplayDetails" },
+      { id: "network", title: "Network & Radio", icon: "network", fn: "getNetworkHardware" },
+      { id: "camera", title: "Camera Sensors", icon: "camera", fn: "getCameraHardware" },
+      { id: "drm", title: "DRM & Media Codecs", icon: "drm", fn: "getDrmCodecDetails" },
+      { id: "storage", title: "Storage Topology", icon: "storage", fn: "getStorageTopology" },
+      { id: "audio", title: "Audio & Peripherals", icon: "audio", fn: "getAudioUsbDetails" },
+      { id: "audioArch", title: "Audio Architecture", icon: "audio", fn: "getAudioArchitecture" },
+      { id: "sensors", title: "Sensor Array", icon: "sensors", fn: "getSensorArray" },
+      { id: "sim", title: "SIM & Carrier", icon: "sim", fn: "getSimCarrierDetails" },
+      { id: "cellular", title: "Cellular Signal", icon: "signal", fn: "getCellularDetails" }
+    ];
+
+    const toggles = $("homeToggles");
+    toggles.innerHTML = "";
+
+    SECTIONS.forEach(sec => {
+      const details = document.createElement("details");
+      details.className = "home-section";
+      details.id = "sec-" + sec.id;
+
+      const summary = document.createElement("summary");
+      summary.innerHTML =
+        '<span class="section-icon">' + ICONS[sec.icon] + '</span>' +
+        '<span class="section-title">' + esc(sec.title) + '</span>';
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "section-body";
+      body.id = "body-" + sec.id;
+      details.appendChild(body);
+      toggles.appendChild(details);
+
+      // Lazy-load when opened
+      summary.addEventListener("click", () => {
+        // Let the details open first
+        setTimeout(() => {
+          if (!details.open) return;
+          if (body.dataset.loaded === "1") return;
+          body.dataset.loaded = "1";
+          body.innerHTML = '<div class="loading">Reading…</div>';
+          try {
+            let raw = Android[sec.fn]();
+            let data = JSON.parse(raw);
+            if (sec.fn === "getSensorArray" || sec.fn === "getCellularDetails"
+                || sec.fn === "getCameraHardware") {
+              // These return structured JSON — render directly
+              if (Array.isArray(data)) {
+                // Sensors / cells array
+                body.innerHTML = "";
+                if (data.length === 0) {
+                  body.innerHTML = '<div class="kv-empty">No data available.</div>';
+                  return;
+                }
+                // For each item, render a card
+                data.forEach((item, idx) => {
+                  const sub = document.createElement("div");
+                  sub.style.padding = "4px 0";
+                  const hdr = document.createElement("div");
+                  hdr.style.cssText = "padding:10px 18px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);";
+                  hdr.textContent = item.Name || item.Type || (sec.title + " #" + (idx + 1));
+                  sub.appendChild(hdr);
+                  const tbl = document.createElement("div");
+                  sub.appendChild(tbl);
+                  renderKV(tbl, item);
+                  body.appendChild(sub);
+                });
+                return;
+              }
+              if (typeof data === "object" && data !== null) {
+                // Camera hardware
+                body.innerHTML = "";
+                const scalars = {};
+                Object.entries(data).forEach(([k, v]) => {
+                  if (!Array.isArray(v)) scalars[k] = v;
+                });
+                if (Object.keys(scalars).length > 0) {
+                  const scalarDiv = document.createElement("div");
+                  body.appendChild(scalarDiv);
+                  renderKV(scalarDiv, scalars);
+                }
+                ["Rear lenses", "Front lenses", "External lenses"].forEach(k => {
+                  if (Array.isArray(data[k]) && data[k].length > 0) {
+                    const h = document.createElement("div");
+                    h.style.cssText = "padding:12px 18px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);";
+                    h.textContent = k;
+                    body.appendChild(h);
+                    data[k].forEach(lens => {
+                      const ldiv = document.createElement("div");
+                      body.appendChild(ldiv);
+                      renderKV(ldiv, lens);
+                    });
+                  }
+                });
+                return;
+              }
+            }
+            renderKV(body, data);
+          } catch (e) {
+            body.innerHTML = '<div class="kv-empty">Failed: ' + esc(e.message) + '</div>';
+          }
+        }, 20);
+      });
+    });
+
+    /* -------- GPU: pull from WebGL (already collected in "Graphics" section earlier) -------- */
+    // Add GPU to hardware section after it opens
+    document.getElementById("sec-hardware").addEventListener("click", () => {
+      setTimeout(() => {
+        const body = $("body-hardware");
+        if (!body || body.dataset.gpuAdded === "1") return;
+        body.dataset.gpuAdded = "1";
+        try {
+          const c = document.createElement("canvas");
+          const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+          if (gl) {
+            const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+            const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+            const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+            const table = body.querySelector(".kv-table");
+            if (table) {
+              const tr1 = document.createElement("tr");
+              tr1.innerHTML = '<td class="kv-label">GPU renderer</td><td class="kv-value">' + esc(renderer) + '</td>';
+              const tr2 = document.createElement("tr");
+              tr2.innerHTML = '<td class="kv-label">GPU vendor</td><td class="kv-value">' + esc(vendor) + '</td>';
+              table.appendChild(tr1);
+              table.appendChild(tr2);
+            }
+          }
+        } catch (e) {}
+      }, 100);
+    });
+  })();
+
 
   /* ============ WI-FI ============ */
   let publicIpInfo = null;

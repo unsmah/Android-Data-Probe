@@ -51,6 +51,33 @@ import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.Task;
+import android.app.ActivityManager;
+import android.content.pm.FeatureInfo;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaDrm;
+import android.os.BatteryManager;
+import android.os.Environment;
+import android.os.StatFs;
+import android.os.Vibrator;
+import android.os.VibrationEffect;
+import android.telephony.CellInfo;
+import android.telephony.CellInfoLte;
+import android.telephony.CellInfoNr;
+import android.telephony.CellSignalStrengthLte;
+import android.telephony.TelephonyManager;
+import android.util.DisplayMetrics;
+import android.view.Display;
+import android.view.WindowManager;
+import java.util.UUID;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -1641,6 +1668,728 @@ public class MainActivity extends AppCompatActivity {
                 new File(getFilesDir(), "tracking_sessions.json").delete();
                 new File(getFilesDir(), "tracking_active.json").delete();
             } catch (Exception ignored) {}
+        }
+
+        /* ==================================================
+           HOME TAB — device introspection
+           ================================================== */
+
+        private String safeStr(String v) { return v != null ? v : ""; }
+
+        private String humanBytes(long bytes) {
+            if (bytes <= 0) return "0 B";
+            String[] u = {"B", "KB", "MB", "GB", "TB"};
+            int i = (int) (Math.log10(bytes) / Math.log10(1024));
+            if (i >= u.length) i = u.length - 1;
+            return String.format(Locale.US, "%.2f %s", bytes / Math.pow(1024, i), u[i]);
+        }
+
+        @JavascriptInterface
+        public String getDeviceOverview() {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("DeviceName", safeStr(Build.MODEL));
+                o.put("Manufacturer", safeStr(Build.MANUFACTURER));
+                o.put("Brand", safeStr(Build.BRAND));
+                o.put("Model", safeStr(Build.MODEL));
+                try {
+                    File dataDir = Environment.getDataDirectory();
+                    StatFs stat = new StatFs(dataDir.getPath());
+                    long total = stat.getBlockCountLong() * stat.getBlockSizeLong();
+                    long avail = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
+                    long used = total - avail;
+                    JSONObject st = new JSONObject();
+                    st.put("Total", total); st.put("Used", used); st.put("Free", avail);
+                    st.put("TotalText", humanBytes(total));
+                    st.put("UsedText", humanBytes(used));
+                    st.put("FreeText", humanBytes(avail));
+                    st.put("Percent", total > 0 ? Math.round(used * 100.0 / total) : 0);
+                    o.put("Storage", st);
+                } catch (Exception e) { o.put("StorageError", e.getMessage()); }
+
+                try {
+                    ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                    ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(mi);
+                    JSONObject r = new JSONObject();
+                    r.put("Total", mi.totalMem);
+                    r.put("Avail", mi.availMem);
+                    r.put("Used", mi.totalMem - mi.availMem);
+                    r.put("TotalText", humanBytes(mi.totalMem));
+                    r.put("UsedText", humanBytes(mi.totalMem - mi.availMem));
+                    r.put("LowMemory", mi.lowMemory);
+                    o.put("RAM", r);
+                } catch (Exception e) { o.put("RamError", e.getMessage()); }
+
+                try {
+                    CameraManager cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+                    o.put("CameraCount", cm.getCameraIdList().length);
+                } catch (Exception ignored) {}
+
+                o.put("AndroidVersion", safeStr(Build.VERSION.RELEASE));
+                o.put("ApiLevel", Build.VERSION.SDK_INT);
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getSoftwareDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("Android version", safeStr(Build.VERSION.RELEASE));
+                o.put("API level", Build.VERSION.SDK_INT);
+                o.put("Codename", safeStr(Build.VERSION.CODENAME));
+                o.put("Incremental", safeStr(Build.VERSION.INCREMENTAL));
+                o.put("Build ID", safeStr(Build.ID));
+                o.put("Display", safeStr(Build.DISPLAY));
+                o.put("Fingerprint", safeStr(Build.FINGERPRINT));
+                o.put("Security patch", safeStr(Build.VERSION.SECURITY_PATCH));
+                o.put("Base OS", safeStr(Build.VERSION.BASE_OS));
+                o.put("Kernel", System.getProperty("os.version", "—"));
+                o.put("Java VM", System.getProperty("java.vm.version", "—"));
+                o.put("Bootloader", safeStr(Build.BOOTLOADER));
+                o.put("Radio firmware", safeStr(Build.getRadioVersion()));
+                o.put("Build type", safeStr(Build.TYPE));
+                o.put("Build tags", safeStr(Build.TAGS));
+                o.put("Build time", new Date(Build.TIME).toString());
+                o.put("Build user", safeStr(Build.USER));
+                o.put("Build host", safeStr(Build.HOST));
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getHardwareDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                String soc = "";
+                if (Build.VERSION.SDK_INT >= 31) {
+                    try {
+                        String mf = safeStr(Build.SOC_MANUFACTURER);
+                        String md = safeStr(Build.SOC_MODEL);
+                        soc = (mf + " " + md).trim();
+                    } catch (Exception ignored) {}
+                }
+                if (soc.isEmpty()) soc = safeStr(Build.HARDWARE);
+                o.put("SoC", soc);
+                o.put("Hardware ID", safeStr(Build.HARDWARE));
+                o.put("Board", safeStr(Build.BOARD));
+                o.put("Device codename", safeStr(Build.DEVICE));
+                o.put("Product", safeStr(Build.PRODUCT));
+                o.put("Manufacturer", safeStr(Build.MANUFACTURER));
+                o.put("CPU ABI", String.join(", ", Build.SUPPORTED_ABIS));
+                o.put("CPU cores", Runtime.getRuntime().availableProcessors());
+                try {
+                    o.put("CPU ABI 32-bit", String.join(", ", Build.SUPPORTED_32_BIT_ABIS));
+                    o.put("CPU ABI 64-bit", String.join(", ", Build.SUPPORTED_64_BIT_ABIS));
+                } catch (Exception ignored) {}
+                try {
+                    ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                    ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(mi);
+                    o.put("Total RAM", humanBytes(mi.totalMem));
+                } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getBatteryDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                IntentFilter f = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                Intent b = registerReceiver(null, f);
+                if (b == null) return o.toString();
+
+                int health = b.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
+                String healthStr = "Unknown";
+                switch (health) {
+                    case BatteryManager.BATTERY_HEALTH_GOOD: healthStr = "Good"; break;
+                    case BatteryManager.BATTERY_HEALTH_OVERHEAT: healthStr = "Overheating"; break;
+                    case BatteryManager.BATTERY_HEALTH_DEAD: healthStr = "Dead"; break;
+                    case BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE: healthStr = "Over voltage"; break;
+                    case BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE: healthStr = "Failure"; break;
+                    case BatteryManager.BATTERY_HEALTH_COLD: healthStr = "Cold"; break;
+                }
+                o.put("Health", healthStr);
+
+                int plug = b.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+                String src = "Battery";
+                if (plug == BatteryManager.BATTERY_PLUGGED_AC) src = "AC Charger";
+                else if (plug == BatteryManager.BATTERY_PLUGGED_USB) src = "USB";
+                else if (plug == BatteryManager.BATTERY_PLUGGED_WIRELESS) src = "Wireless";
+                o.put("Power source", src);
+
+                int tempTenths = b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+                if (tempTenths > 0) {
+                    double c = tempTenths / 10.0;
+                    o.put("Temperature", String.format(Locale.US, "%.1f C / %.1f F", c, c * 9 / 5 + 32));
+                } else o.put("Temperature", "—");
+
+                int volt = b.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+                o.put("Voltage", volt > 0 ? String.format(Locale.US, "%.3f V", volt / 1000.0) : "—");
+
+                int level = b.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = b.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                if (level >= 0 && scale > 0)
+                    o.put("Charge level", Math.round(level * 100f / scale) + "%");
+
+                BatteryManager bm = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
+                if (bm != null && Build.VERSION.SDK_INT >= 21) {
+                    try {
+                        long charge = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER);
+                        long cap = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                        if (charge > 0) o.put("Charge counter", charge + " uAh");
+                        if (cap > 0) o.put("Capacity", cap + "%");
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getDisplayDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+                Display d = wm.getDefaultDisplay();
+                DisplayMetrics dm = new DisplayMetrics();
+                d.getRealMetrics(dm);
+                o.put("Resolution", dm.widthPixels + " x " + dm.heightPixels + " px");
+                o.put("Density", dm.densityDpi + " dpi");
+                o.put("Refresh rate", String.format(Locale.US, "%.0f Hz", d.getRefreshRate()));
+                if (Build.VERSION.SDK_INT >= 23) {
+                    try {
+                        Display.Mode m = d.getMode();
+                        o.put("Active mode", m.getPhysicalWidth() + "x" + m.getPhysicalHeight()
+                            + " @ " + String.format(Locale.US, "%.1f Hz", m.getRefreshRate()));
+                    } catch (Exception ignored) {}
+                }
+                if (Build.VERSION.SDK_INT >= 24) {
+                    try {
+                        Display.HdrCapabilities hdr = d.getHdrCapabilities();
+                        int[] types = hdr.getSupportedHdrTypes();
+                        JSONArray arr = new JSONArray();
+                        for (int t : types) {
+                            switch (t) {
+                                case Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION: arr.put("Dolby Vision"); break;
+                                case Display.HdrCapabilities.HDR_TYPE_HDR10: arr.put("HDR10"); break;
+                                case Display.HdrCapabilities.HDR_TYPE_HLG: arr.put("HLG"); break;
+                                case Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS: arr.put("HDR10+"); break;
+                            }
+                        }
+                        o.put("HDR", arr.length() > 0 ? arr : "None detected");
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getNetworkHardware() {
+            JSONObject o = new JSONObject();
+            try {
+                PackageManager pm = getPackageManager();
+                if (Build.VERSION.SDK_INT >= 30) {
+                    JSONArray wifi = new JSONArray();
+                    try {
+                        java.lang.reflect.Method m = WifiManager.class.getMethod(
+                            "isWifiStandardSupported", int.class);
+                        if ((Boolean) m.invoke(wifiManager, 4)) wifi.put("Wi-Fi 4 (802.11n)");
+                        if ((Boolean) m.invoke(wifiManager, 5)) wifi.put("Wi-Fi 5 (802.11ac)");
+                        if ((Boolean) m.invoke(wifiManager, 6)) wifi.put("Wi-Fi 6 (802.11ax)");
+                        if ((Boolean) m.invoke(wifiManager, 8)) wifi.put("Wi-Fi 7 (802.11be)");
+                    } catch (Exception ignored) {}
+                    o.put("Wi-Fi protocols", wifi.length() > 0 ? wifi : "Unknown");
+                } else o.put("Wi-Fi protocols", "Requires Android 11+");
+
+                o.put("NFC", pm.hasSystemFeature(PackageManager.FEATURE_NFC));
+                o.put("NFC (Host Card Emulation)", pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION));
+                o.put("Telephony", pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY));
+                o.put("Telephony GSM", pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_GSM));
+                o.put("Telephony CDMA", pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CDMA));
+                o.put("BLE (BT Smart)", pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE));
+                o.put("Bluetooth classic", pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH));
+                o.put("GPS", pm.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS));
+                o.put("Camera autofocus", pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_AUTOFOCUS));
+                o.put("Camera flash", pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH));
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getCameraHardware() {
+            JSONObject o = new JSONObject();
+            try {
+                CameraManager cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+                String[] ids = cm.getCameraIdList();
+                JSONArray rears = new JSONArray();
+                JSONArray fronts = new JSONArray();
+                JSONArray externals = new JSONArray();
+                int flashCount = 0, oisCount = 0;
+                for (String id : ids) {
+                    try {
+                        CameraCharacteristics c = cm.getCameraCharacteristics(id);
+                        Integer facing = c.get(CameraCharacteristics.LENS_FACING);
+                        float[] focal = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                        float[] apertures = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES);
+                        android.util.Size px = c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE);
+                        Boolean flash = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                        int[] oisModes = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION);
+                        boolean ois = oisModes != null && oisModes.length > 0;
+
+                        JSONObject entry = new JSONObject();
+                        entry.put("id", id);
+                        if (px != null) {
+                            long mp = (long) px.getWidth() * px.getHeight();
+                            entry.put("MP", String.format(Locale.US, "%.1f MP", mp / 1_000_000.0));
+                            entry.put("Resolution", px.getWidth() + " x " + px.getHeight());
+                        }
+                        if (apertures != null && apertures.length > 0)
+                            entry.put("Aperture", "f/" + String.format(Locale.US, "%.1f", apertures[0]));
+                        if (focal != null && focal.length > 0)
+                            entry.put("Focal length", String.format(Locale.US, "%.1f mm", focal[0]));
+                        entry.put("Flash", flash != null && flash);
+                        entry.put("OIS", ois);
+                        if (flash != null && flash) flashCount++;
+                        if (ois) oisCount++;
+
+                        if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) rears.put(entry);
+                        else if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) fronts.put(entry);
+                        else externals.put(entry);
+                    } catch (Exception ignored) {}
+                }
+                o.put("Total lenses", ids.length);
+                o.put("Rear lenses", rears);
+                o.put("Front lenses", fronts);
+                o.put("External lenses", externals);
+                o.put("Flash modules", flashCount);
+                o.put("OIS modules", oisCount);
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getDrmCodecDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                try {
+                    UUID widevine = new UUID(0xedef8ba979d64aceL, 0xa3c827dcd51d21edL);
+                    MediaDrm drm = new MediaDrm(widevine);
+                    byte[] level = drm.getPropertyByteArray(MediaDrm.PROPERTY_SECURITY_LEVEL);
+                    String lvl = (level != null && level.length > 0) ? String.valueOf((char) level[0]) : "?";
+                    String pretty = "1".equals(lvl) ? "L1 (hardware-secure, HD/4K capable)"
+                                 : "3".equals(lvl) ? "L3 (software, SD only)"
+                                 : lvl;
+                    o.put("Widevine", pretty);
+                    drm.close();
+                } catch (Exception e) { o.put("Widevine", "Not available"); }
+
+                try {
+                    UUID playready = new UUID(0x9a04f07998404286L, 0xab92e65be0885f95L);
+                    o.put("PlayReady", MediaDrm.isCryptoSchemeSupported(playready));
+                } catch (Exception ignored) {}
+                try {
+                    UUID clearKey = new UUID(0x1077efecc0b24d02L, 0xace33c1e52e2fb4bL);
+                    o.put("ClearKey", MediaDrm.isCryptoSchemeSupported(clearKey));
+                } catch (Exception ignored) {}
+
+                try {
+                    JSONArray decoders = new JSONArray();
+                    MediaCodecList list = new MediaCodecList(MediaCodecList.ALL_CODECS);
+                    java.util.TreeSet<String> found = new java.util.TreeSet<>();
+                    for (MediaCodecInfo ci : list.getCodecInfos()) {
+                        if (ci.isEncoder()) continue;
+                        for (String type : ci.getSupportedTypes()) {
+                            String t = type.toLowerCase(Locale.US);
+                            if (t.startsWith("video/avc")) found.add("H.264 / AVC");
+                            else if (t.startsWith("video/hevc")) found.add("H.265 / HEVC");
+                            else if (t.startsWith("video/x-vnd.on2.vp9")) found.add("VP9");
+                            else if (t.startsWith("video/av01")) found.add("AV1");
+                            else if (t.startsWith("video/mp4v")) found.add("MPEG-4");
+                            else if (t.startsWith("video/3gpp")) found.add("H.263");
+                            else if (t.startsWith("video/x-vnd.on2.vp8")) found.add("VP8");
+                        }
+                    }
+                    for (String x : found) decoders.put(x);
+                    o.put("Video decoders", decoders);
+                } catch (Exception ignored) {}
+
+                try {
+                    JSONArray audioDecs = new JSONArray();
+                    MediaCodecList list = new MediaCodecList(MediaCodecList.ALL_CODECS);
+                    java.util.TreeSet<String> found = new java.util.TreeSet<>();
+                    for (MediaCodecInfo ci : list.getCodecInfos()) {
+                        if (ci.isEncoder()) continue;
+                        for (String type : ci.getSupportedTypes()) {
+                            String t = type.toLowerCase(Locale.US);
+                            if (t.startsWith("audio/mpeg")) found.add("MP3");
+                            else if (t.startsWith("audio/mp4a")) found.add("AAC");
+                            else if (t.startsWith("audio/flac")) found.add("FLAC");
+                            else if (t.startsWith("audio/opus")) found.add("Opus");
+                            else if (t.startsWith("audio/vorbis")) found.add("Vorbis");
+                            else if (t.startsWith("audio/raw")) found.add("PCM / Raw");
+                            else if (t.startsWith("audio/amr")) found.add("AMR");
+                            else if (t.startsWith("audio/ac3") || t.startsWith("audio/eac3")) found.add("Dolby AC-3/E-AC-3");
+                        }
+                    }
+                    for (String x : found) audioDecs.put(x);
+                    o.put("Audio decoders", audioDecs);
+                } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getStorageTopology() {
+            JSONObject o = new JSONObject();
+            try {
+                File dataDir = Environment.getDataDirectory();
+                StatFs stat = new StatFs(dataDir.getPath());
+                String fsType = "unknown";
+                try { fsType = stat.getFileSystemType(); } catch (Exception ignored) {}
+                o.put("Data filesystem", fsType);
+                String secondary = System.getenv("SECONDARY_STORAGE");
+                o.put("SECONDARY_STORAGE", secondary != null ? secondary : "(none)");
+                String external = System.getenv("EXTERNAL_STORAGE");
+                o.put("EXTERNAL_STORAGE", external != null ? external : "(none)");
+                o.put("External state", Environment.getExternalStorageState());
+                o.put("External removable", Environment.isExternalStorageRemovable());
+                try {
+                    android.app.admin.DevicePolicyManager dpm =
+                        (android.app.admin.DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+                    if (dpm != null) {
+                        int status = dpm.getStorageEncryptionStatus();
+                        String enc;
+                        switch (status) {
+                            case android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE:
+                                enc = "Active (full disk)"; break;
+                            case android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY:
+                                enc = "Active (file-based / default key)"; break;
+                            case android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER:
+                                enc = "Active (file-based, per-user)"; break;
+                            case android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_INACTIVE:
+                                enc = "Not encrypted"; break;
+                            default:
+                                enc = "Status " + status;
+                        }
+                        o.put("Encryption", enc);
+                    }
+                } catch (Exception ignored) {}
+                o.put("Data partition total", humanBytes(stat.getBlockCountLong() * stat.getBlockSizeLong()));
+                o.put("Data partition free", humanBytes(stat.getAvailableBlocksLong() * stat.getBlockSizeLong()));
+                o.put("Block size", stat.getBlockSizeLong() + " B");
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getAudioUsbDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                try {
+                    o.put("Wired headset", am.isWiredHeadsetOn());
+                    o.put("Bluetooth A2DP", am.isBluetoothA2dpOn());
+                    o.put("Speakerphone", am.isSpeakerphoneOn());
+                    o.put("Music active", am.isMusicActive());
+                } catch (Exception ignored) {}
+
+                try {
+                    AudioDeviceInfo[] outs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+                    JSONArray outsArr = new JSONArray();
+                    for (AudioDeviceInfo d : outs) {
+                        JSONObject e = new JSONObject();
+                        e.put("type", audioDeviceTypeName(d.getType()));
+                        e.put("name", safeStr(String.valueOf(d.getProductName())));
+                        int[] chans = d.getChannelCounts();
+                        e.put("channels", chans.length > 0 ? chans[0] : 0);
+                        int[] rates = d.getSampleRates();
+                        e.put("sampleRate", rates.length > 0 ? rates[0] : 0);
+                        outsArr.put(e);
+                    }
+                    o.put("Output devices", outsArr);
+                } catch (Exception ignored) {}
+
+                try {
+                    UsbManager usb = (UsbManager) getSystemService(Context.USB_SERVICE);
+                    java.util.HashMap<String, UsbDevice> devs = usb.getDeviceList();
+                    JSONArray usbArr = new JSONArray();
+                    for (UsbDevice d : devs.values()) {
+                        JSONObject e = new JSONObject();
+                        e.put("name", safeStr(d.getProductName()));
+                        e.put("vendor", d.getVendorId());
+                        e.put("product", d.getProductId());
+                        usbArr.put(e);
+                    }
+                    o.put("USB devices attached", usbArr);
+                } catch (Exception ignored) {}
+
+                try {
+                    Vibrator vib = null;
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        android.os.VibratorManager vm =
+                            (android.os.VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                        vib = vm.getDefaultVibrator();
+                    } else {
+                        vib = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                    }
+                    o.put("Vibrator present", vib != null && vib.hasVibrator());
+                    if (vib != null && Build.VERSION.SDK_INT >= 26) {
+                        o.put("Vibrator amplitude control", vib.hasAmplitudeControl());
+                    }
+                } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        private String audioDeviceTypeName(int type) {
+            switch (type) {
+                case AudioDeviceInfo.TYPE_BUILTIN_EARPIECE: return "Built-in earpiece";
+                case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER: return "Built-in speaker";
+                case AudioDeviceInfo.TYPE_WIRED_HEADSET: return "Wired headset (3.5mm)";
+                case AudioDeviceInfo.TYPE_WIRED_HEADPHONES: return "Wired headphones";
+                case AudioDeviceInfo.TYPE_BLUETOOTH_SCO: return "Bluetooth SCO";
+                case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP: return "Bluetooth A2DP";
+                case AudioDeviceInfo.TYPE_HDMI: return "HDMI";
+                case AudioDeviceInfo.TYPE_USB_DEVICE: return "USB audio";
+                case AudioDeviceInfo.TYPE_USB_HEADSET: return "USB headset";
+                case AudioDeviceInfo.TYPE_TELEPHONY: return "Telephony";
+                case AudioDeviceInfo.TYPE_LINE_ANALOG: return "Line analog";
+                case AudioDeviceInfo.TYPE_LINE_DIGITAL: return "Line digital";
+                case AudioDeviceInfo.TYPE_HDMI_ARC: return "HDMI ARC";
+                case AudioDeviceInfo.TYPE_HDMI_EARC: return "HDMI eARC";
+                case AudioDeviceInfo.TYPE_USB_ACCESSORY: return "USB accessory";
+                case AudioDeviceInfo.TYPE_DOCK: return "Dock";
+                case AudioDeviceInfo.TYPE_FM: return "FM";
+                case AudioDeviceInfo.TYPE_BUILTIN_MIC: return "Built-in microphone";
+                case AudioDeviceInfo.TYPE_FM_TUNER: return "FM tuner";
+                case AudioDeviceInfo.TYPE_TV_TUNER: return "TV tuner";
+                case AudioDeviceInfo.TYPE_TELEPHONY_LINE: return "Telephony line";
+                case AudioDeviceInfo.TYPE_IP: return "IP";
+                case AudioDeviceInfo.TYPE_BUS: return "BUS";
+                case AudioDeviceInfo.TYPE_REMOTE_SUBMIX: return "Remote submix";
+                case AudioDeviceInfo.TYPE_BLE_HEADSET: return "Bluetooth LE headset";
+                case AudioDeviceInfo.TYPE_BLE_SPEAKER: return "Bluetooth LE speaker";
+                case AudioDeviceInfo.TYPE_BLE_BROADCAST: return "Bluetooth LE broadcast";
+                default: return "Unknown (" + type + ")";
+            }
+        }
+
+        @JavascriptInterface
+        public String getAudioArchitecture() {
+            JSONObject o = new JSONObject();
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                try {
+                    String outCh = am.getProperty(AudioManager.PROPERTY_OUTPUT_CHANNELS);
+                    o.put("Output channels", outCh != null ? outCh : "unknown");
+                } catch (Exception ignored) {}
+                try {
+                    String rate = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE);
+                    o.put("Native output rate", rate != null ? rate + " Hz" : "unknown");
+                } catch (Exception ignored) {}
+                try {
+                    String fpb = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
+                    o.put("Frames per buffer", fpb != null ? fpb : "unknown");
+                } catch (Exception ignored) {}
+                try {
+                    AudioDeviceInfo[] ins = am.getDevices(AudioManager.GET_DEVICES_INPUTS);
+                    int mics = 0;
+                    for (AudioDeviceInfo d : ins) {
+                        if (d.getType() == AudioDeviceInfo.TYPE_BUILTIN_MIC) mics++;
+                    }
+                    o.put("Built-in mic ports", mics);
+                } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String getSensorArray() {
+            JSONArray arr = new JSONArray();
+            try {
+                SensorManager sm = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+                java.util.List<Sensor> list = sm.getSensorList(Sensor.TYPE_ALL);
+                for (Sensor s : list) {
+                    JSONObject o = new JSONObject();
+                    o.put("Name", safeStr(s.getName()));
+                    o.put("Vendor", safeStr(s.getVendor()));
+                    o.put("Type", sensorTypeName(s.getType()));
+                    o.put("Power", s.getPower() + " mA");
+                    o.put("Max range", s.getMaximumRange());
+                    o.put("Resolution", s.getResolution());
+                    o.put("Min delay", s.getMinDelay() + " us");
+                    arr.put(o);
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
+        }
+
+        private String sensorTypeName(int t) {
+            switch (t) {
+                case Sensor.TYPE_ACCELEROMETER: return "Accelerometer";
+                case Sensor.TYPE_GYROSCOPE: return "Gyroscope";
+                case Sensor.TYPE_MAGNETIC_FIELD: return "Magnetometer";
+                case Sensor.TYPE_LIGHT: return "Light sensor";
+                case Sensor.TYPE_PRESSURE: return "Barometer";
+                case Sensor.TYPE_PROXIMITY: return "Proximity";
+                case Sensor.TYPE_GRAVITY: return "Gravity";
+                case Sensor.TYPE_LINEAR_ACCELERATION: return "Linear acceleration";
+                case Sensor.TYPE_ROTATION_VECTOR: return "Rotation vector";
+                case Sensor.TYPE_RELATIVE_HUMIDITY: return "Humidity";
+                case Sensor.TYPE_AMBIENT_TEMPERATURE: return "Ambient temperature";
+                case Sensor.TYPE_STEP_COUNTER: return "Step counter";
+                case Sensor.TYPE_STEP_DETECTOR: return "Step detector";
+                case Sensor.TYPE_SIGNIFICANT_MOTION: return "Significant motion";
+                case Sensor.TYPE_GAME_ROTATION_VECTOR: return "Game rotation vector";
+                case Sensor.TYPE_HEART_RATE: return "Heart rate";
+                default: return "Sensor type " + t;
+            }
+        }
+
+        @JavascriptInterface
+        public String getSimCarrierDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+                if (tm == null) return o.toString();
+                try { o.put("SIM state", simStateName(tm.getSimState())); } catch (Exception ignored) {}
+                try { o.put("SIM operator name", safeStr(tm.getSimOperatorName())); } catch (Exception ignored) {}
+                try { o.put("SIM operator code", safeStr(tm.getSimOperator())); } catch (Exception ignored) {}
+                try { o.put("SIM country (ISO)", safeStr(tm.getSimCountryIso()).toUpperCase()); } catch (Exception ignored) {}
+                try {
+                    String op = safeStr(tm.getSimOperator());
+                    if (op.length() >= 5) {
+                        o.put("MCC", op.substring(0, 3));
+                        o.put("MNC", op.substring(3));
+                    }
+                } catch (Exception ignored) {}
+                try { o.put("Carrier name", safeStr(tm.getNetworkOperatorName())); } catch (Exception ignored) {}
+                try { o.put("Network country (ISO)", safeStr(tm.getNetworkCountryIso()).toUpperCase()); } catch (Exception ignored) {}
+                try { o.put("Phone type", phoneTypeName(tm.getPhoneType())); } catch (Exception ignored) {}
+                try { o.put("SIM count", tm.getPhoneCount()); } catch (Exception ignored) {}
+                try { o.put("Data network type", networkTypeName(tm.getDataNetworkType())); } catch (Exception ignored) {}
+                try { o.put("Voice network type", networkTypeName(tm.getVoiceNetworkType())); } catch (Exception ignored) {}
+                try { o.put("Network roaming", tm.isNetworkRoaming()); } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            return o.toString();
+        }
+
+        private String simStateName(int s) {
+            switch (s) {
+                case TelephonyManager.SIM_STATE_ABSENT: return "No SIM";
+                case TelephonyManager.SIM_STATE_PIN_REQUIRED: return "PIN required";
+                case TelephonyManager.SIM_STATE_PUK_REQUIRED: return "PUK required";
+                case TelephonyManager.SIM_STATE_NETWORK_LOCKED: return "Network locked";
+                case TelephonyManager.SIM_STATE_READY: return "Ready";
+                case TelephonyManager.SIM_STATE_NOT_READY: return "Not ready";
+                case TelephonyManager.SIM_STATE_PERM_DISABLED: return "Permanently disabled";
+                case TelephonyManager.SIM_STATE_CARD_IO_ERROR: return "Card I/O error";
+                case TelephonyManager.SIM_STATE_CARD_RESTRICTED: return "Card restricted";
+                case TelephonyManager.SIM_STATE_LOADED: return "Loaded";
+                default: return "Unknown (" + s + ")";
+            }
+        }
+
+        private String phoneTypeName(int t) {
+            switch (t) {
+                case TelephonyManager.PHONE_TYPE_GSM: return "GSM";
+                case TelephonyManager.PHONE_TYPE_CDMA: return "CDMA";
+                case TelephonyManager.PHONE_TYPE_SIP: return "SIP";
+                case TelephonyManager.PHONE_TYPE_NONE: return "None";
+                default: return "Unknown";
+            }
+        }
+
+        private String networkTypeName(int t) {
+            switch (t) {
+                case TelephonyManager.NETWORK_TYPE_GPRS: return "2G GPRS";
+                case TelephonyManager.NETWORK_TYPE_EDGE: return "2G EDGE";
+                case TelephonyManager.NETWORK_TYPE_UMTS: return "3G UMTS";
+                case TelephonyManager.NETWORK_TYPE_HSDPA: return "3G HSDPA";
+                case TelephonyManager.NETWORK_TYPE_HSUPA: return "3G HSUPA";
+                case TelephonyManager.NETWORK_TYPE_HSPA: return "3G HSPA";
+                case TelephonyManager.NETWORK_TYPE_HSPAP: return "3G HSPA+";
+                case TelephonyManager.NETWORK_TYPE_CDMA: return "2G CDMA";
+                case TelephonyManager.NETWORK_TYPE_EVDO_0: return "3G EVDO 0";
+                case TelephonyManager.NETWORK_TYPE_EVDO_A: return "3G EVDO A";
+                case TelephonyManager.NETWORK_TYPE_EVDO_B: return "3G EVDO B";
+                case TelephonyManager.NETWORK_TYPE_1xRTT: return "2G 1xRTT";
+                case TelephonyManager.NETWORK_TYPE_IDEN: return "2G iDEN";
+                case TelephonyManager.NETWORK_TYPE_LTE: return "4G LTE";
+                case TelephonyManager.NETWORK_TYPE_EHRPD: return "3G eHRPD";
+                case TelephonyManager.NETWORK_TYPE_NR: return "5G NR";
+                case TelephonyManager.NETWORK_TYPE_IWLAN: return "IWLAN";
+                case TelephonyManager.NETWORK_TYPE_UNKNOWN: return "Unknown";
+                default: return "Other (" + t + ")";
+            }
+        }
+
+        @JavascriptInterface
+        public String getCellularDetails() {
+            JSONObject o = new JSONObject();
+            try {
+                TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+                if (tm == null) return o.toString();
+                if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    o.put("error", "Location permission required");
+                    return o.toString();
+                }
+                java.util.List<CellInfo> cells = tm.getAllCellInfo();
+                if (cells == null || cells.isEmpty()) {
+                    o.put("error", "No cell info available");
+                    return o.toString();
+                }
+                JSONArray arr = new JSONArray();
+                for (CellInfo ci : cells) {
+                    JSONObject e = new JSONObject();
+                    try {
+                        if (ci instanceof CellInfoLte) {
+                            CellInfoLte lte = (CellInfoLte) ci;
+                            e.put("Type", "4G LTE");
+                            e.put("Registered", ci.isRegistered());
+                            if (lte.getCellIdentity() != null) {
+                                e.put("Cell ID (CI)", lte.getCellIdentity().getCi());
+                                e.put("TAC", lte.getCellIdentity().getTac());
+                                e.put("PCI", lte.getCellIdentity().getPci());
+                                e.put("EARFCN", lte.getCellIdentity().getEarfcn());
+                                e.put("MCC", safeStr(lte.getCellIdentity().getMccString()));
+                                e.put("MNC", safeStr(lte.getCellIdentity().getMncString()));
+                            }
+                            CellSignalStrengthLte sig = lte.getCellSignalStrength();
+                            e.put("RSRP", sig.getRsrp() + " dBm");
+                            e.put("RSRQ", sig.getRsrq() + " dB");
+                            e.put("RSSNR", sig.getRssnr() + " dB");
+                            e.put("RSSI", sig.getRssi() + " dBm");
+                            e.put("Timing advance", sig.getTimingAdvance());
+                            e.put("Signal level", sig.getLevel() + " / 4");
+                        } else if (Build.VERSION.SDK_INT >= 29 && ci instanceof CellInfoNr) {
+                            e.put("Type", "5G NR");
+                            e.put("Registered", ci.isRegistered());
+                            android.telephony.CellSignalStrength nrSig = ci.getCellSignalStrength();
+                            if (nrSig != null) {
+                                e.put("Signal level", nrSig.getLevel() + " / 4");
+                                e.put("dBm", nrSig.getDbm() + " dBm");
+                            }
+                        } else {
+                            e.put("Type", "Other");
+                            e.put("Registered", ci.isRegistered());
+                            android.telephony.CellSignalStrength s = ci.getCellSignalStrength();
+                            if (s != null) {
+                                e.put("Signal level", s.getLevel() + " / 4");
+                                e.put("dBm", s.getDbm() + " dBm");
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                    arr.put(e);
+                }
+                o.put("cells", arr);
+            } catch (Exception e) {
+                try { o.put("error", e.getMessage()); } catch (Exception ignored) {}
+            }
+            return o.toString();
         }
 
         private String intToIp(int ip) {
