@@ -255,6 +255,50 @@
   #appSearch:focus { border-color: var(--accent); }
   #appSearch::placeholder { color: var(--text-faint); }
 
+  /* List view for apps */
+  .app-list {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .app-list-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px;
+    cursor: pointer;
+  }
+  .app-list-item img, .app-list-item .fallback {
+    width: 40px; height: 40px; border-radius: 8px;
+    background: #1b202c; border: 1px solid #232a3a; object-fit: contain;
+  }
+  .app-list-item .fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: var(--accent);
+  }
+  .app-list-item .info { flex: 1; min-width: 0; }
+  .app-list-item .info .name {
+    font-size: 13px; font-weight: 500; color: var(--text);
+    word-break: break-all; margin-bottom: 2px;
+  }
+  .app-list-item .info .pkg {
+    font-size: 10px; color: var(--text-faint);
+    font-family: ui-monospace, monospace; word-break: break-all;
+  }
+  .app-list-item .chev { color: var(--text-faint); font-size: 18px; flex-shrink: 0; }
+
+  /* Context menu (press-and-hold) */
+  .app-context-menu {
+    position: fixed; z-index: 200; min-width: 160px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.45);
+    padding: 6px; display: none;
+  }
+  .app-context-menu button {
+    display: block; width: 100%; background: none; border: none;
+    padding: 8px 12px; text-align: left; font-size: 13px;
+    color: var(--text); cursor: pointer; border-radius: 6px;
+  }
+  .app-context-menu button:hover { background: var(--card2); }
+  .app-context-menu button.danger { color: var(--danger); }
+
   #map { height: 55vh; min-height: 320px; border-radius: 12px; overflow: hidden;
          background: var(--card); border: 1px solid var(--border); margin-top: 4px; }
   .leaflet-container { background: #12151f; }
@@ -1097,8 +1141,12 @@
       <button class="btn" data-filter="system">System apps</button>
       <button class="btn" data-filter="all">All</button>
     </div>
-    <div id="appSearchRow" style="display:none; margin-bottom:12px;">
+        <div id="appSearchRow" style="display:none; margin-bottom:12px;">
       <input type="text" id="appSearch" placeholder="Search apps…" autocomplete="off" />
+    </div>
+    <div class="btn-row" id="appViewRow" style="display:none;">
+      <button class="btn" data-view="grid" id="btnViewGrid">Grid</button>
+      <button class="btn" data-view="list" id="btnViewList">List</button>
     </div>
     <div id="appsGrid"></div>
   </section>
@@ -3569,7 +3617,7 @@
   window.onLiveLocationUpdate = function () {};
 
   /* ============ INSTALLED APPS ============ */
-    let appsCache = null, currentFilter = "all", appsTimeout = null, appSearchTerm = "";
+    let appsCache = null, currentFilter = "all", appsTimeout = null, appSearchTerm = "", viewMode = "grid";
 
   $("btnLoadApps").addEventListener("click", () => {
     const btn = $("btnLoadApps");
@@ -3596,7 +3644,11 @@
     const btn = $("btnLoadApps");
     btn.disabled = false; btn.textContent = "Reload apps";
         $("appFilters").style.display = "";
-    $("appSearchRow").style.display = "";
+        $("appSearchRow").style.display = "";
+    $("appViewRow").style.display = "";
+    document.querySelectorAll("#appViewRow button").forEach(b => {
+      b.classList.toggle("btn-primary", b.dataset.view === viewMode);
+    });
     document.querySelectorAll("#appFilters button").forEach(b => {
       b.classList.toggle("btn-primary", b.dataset.filter === currentFilter);
     });
@@ -3619,25 +3671,113 @@
       (filter === "all" || a.Type === filter) &&
       (!term || a.Name.toLowerCase().includes(term) || a.Package.toLowerCase().includes(term))
     );
-    $("appsGrid").innerHTML = list.length
-      ? '<div class="app-grid">' + list.map(a => {
-          const icon = a.Icon
-            ? '<img src="' + a.Icon + '" alt="">'
-            : '<div class="fallback">' + esc((a.Name[0] || "?").toUpperCase()) + '</div>';
-          return '<div class="app-tile" data-pkg="' + esc(a.Package) + '" title="' + esc(a.Package) + '">' +
+    const gridEl = $("appsGrid");
+    if (!list.length) {
+      gridEl.innerHTML = '<div class="empty">' + (term ? "No apps match search." : "No apps in this filter.") + '</div>';
+      return;
+    }
+    const tileClass = viewMode === "list" ? "app-list-item" : "app-tile";
+    const tileTag = viewMode === "list"
+      ? function(a, icon) {
+          return '<div class="' + tileClass + '" data-pkg="' + esc(a.Package) + '" title="' + esc(a.Package) + '">' +
+                 icon + '<div class="info"><div class="name">' + esc(a.Name) +
+                 '</div><div class="pkg">' + esc(a.Package) + '</div></div>' +
+                 '<div class="chev">&#9650;</div></div>';
+        }
+      : function(a, icon) {
+          return '<div class="' + tileClass + '" data-pkg="' + esc(a.Package) + '" title="' + esc(a.Package) + '">' +
                  icon + '<div class="label">' + esc(a.Name) + '</div></div>';
-        }).join("") + '</div>'
-      : '<div class="empty">' + (term ? "No apps match search." : "No apps in this filter.") + '</div>';
+        };
+    const container = viewMode === "list" ? "app-list" : "app-grid";
+    gridEl.innerHTML = '<div class="' + container + '">' + list.map(a => {
+        const icon = a.Icon
+          ? '<img src="' + a.Icon + '" alt="">'
+          : '<div class="fallback">' + esc((a.Name[0] || "?").toUpperCase()) + '</div>';
+        return tileTag(a, icon);
+      }).join("") + '</div>';
   }
 
-  /* Click-to-launch installed apps via event delegation */
-  $("appsGrid").addEventListener("click", e => {
-    const tile = e.target.closest(".app-tile");
+  /* View mode toggle (grid / list) */
+  $("btnViewGrid").addEventListener("click", () => {
+    viewMode = "grid";
+    document.querySelectorAll("#appViewRow button").forEach(x => x.classList.toggle("btn-primary", x === $("btnViewGrid")));
+    if (appsCache) renderApps(appsCache, currentFilter);
+  });
+  $("btnViewList").addEventListener("click", () => {
+    viewMode = "list";
+    document.querySelectorAll("#appViewRow button").forEach(x => x.classList.toggle("btn-primary", x === $("btnViewList")));
+    if (appsCache) renderApps(appsCache, currentFilter);
+  });
+
+  /* Click-to-launch (short tap) + press-and-hold context menu */
+  let pressTimer = null, longPress = false;
+  const gridEl = $("appsGrid");
+  function startPress(e) {
+    if (pressTimer) return; // Prevent double-fire on touch+mouse devices
+    const tile = e.target.closest(".app-tile, .app-list-item");
+    if (!tile) return;
+    const pkg = tile.getAttribute("data-pkg");
+    if (!pkg) return;
+    longPress = false;
+    pressTimer = setTimeout(() => {
+      longPress = true;
+      pressTimer = null;
+      showAppContextMenu(pkg, e);
+    }, 600);
+  }
+  function endPress() {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+  gridEl.addEventListener("mousedown", startPress);
+  gridEl.addEventListener("mouseup", endPress);
+  gridEl.addEventListener("mouseleave", endPress);
+  gridEl.addEventListener("touchstart", startPress, { passive: true });
+  gridEl.addEventListener("touchend", endPress);
+  gridEl.addEventListener("touchcancel", endPress);
+  gridEl.addEventListener("touchmove", endPress, { passive: true });
+  gridEl.addEventListener("click", e => {
+    if (longPress) { longPress = false; return; }
+    const tile = e.target.closest(".app-tile, .app-list-item");
     if (tile) {
       const pkg = tile.getAttribute("data-pkg");
       if (pkg) Android.launchApp(pkg);
     }
   });
+
+  /* Context menu for press-and-hold on app tiles */
+  function showAppContextMenu(pkg, e) {
+    let menu = $("appContextMenu");
+    if (!menu) {
+      menu = document.createElement("div");
+      menu.id = "appContextMenu";
+      menu.className = "app-context-menu";
+      menu.innerHTML =
+        '<button data-action="open">Open</button>' +
+        '<button data-action="settings">App Settings</button>' +
+        '<button data-action="uninstall" class="danger">Uninstall</button>';
+      document.body.appendChild(menu);
+      menu.addEventListener("click", evt => {
+        const action = evt.target.dataset.action;
+        if (!action || !menu._pkg) return;
+        if (action === "open") Android.launchApp(menu._pkg);
+        else if (action === "settings") Android.openAppSettings(menu._pkg);
+        else if (action === "uninstall") Android.uninstallApp(menu._pkg);
+        menu.style.display = "none";
+      });
+      document.addEventListener("click", function outside(e2) {
+        if (e2.target !== menu && !menu.contains(e2.target)) {
+          menu.style.display = "none";
+          document.removeEventListener("click", outside);
+        }
+      });
+    }
+    menu._pkg = pkg;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    menu.style.left = (x + 10) + "px";
+    menu.style.top = (y + 10) + "px";
+    menu.style.display = "block";
+  }
 
   /* Search bar filtering */
   $("appSearch").addEventListener("input", e => {
@@ -3653,7 +3793,11 @@
         appsCache = cached;
                 $("btnLoadApps").textContent = "Reload apps";
         $("appFilters").style.display = "";
-        $("appSearchRow").style.display = "";
+                $("appSearchRow").style.display = "";
+        $("appViewRow").style.display = "";
+        document.querySelectorAll("#appViewRow button").forEach(b => {
+          b.classList.toggle("btn-primary", b.dataset.view === viewMode);
+        });
         document.querySelectorAll("#appFilters button").forEach(b => {
           b.classList.toggle("btn-primary", b.dataset.filter === currentFilter);
         });

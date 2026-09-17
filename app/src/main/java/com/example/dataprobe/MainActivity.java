@@ -1522,6 +1522,23 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
         }
 
+        @JavascriptInterface
+        public void openAppSettings(String packageName) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + packageName));
+                startActivity(intent);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void uninstallApp(String packageName) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + packageName));
+                startActivity(intent);
+            } catch (Exception ignored) {}
+        }
+
         private File appsCacheFile() { return new File(getFilesDir(), "apps_cache.json"); }
 
         private void writeAppsCache(String json) {
