@@ -1501,7 +1501,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         /* ---- Installed apps ---- */
-        @JavascriptInterface
+                @JavascriptInterface
         public void loadAppsAsync(final String filter) {
             new Thread(() -> {
                 final String result = getInstalledAppsInternal(filter);
@@ -1511,6 +1511,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public String getCachedApps() { return readAppsCache(); }
+
+        @JavascriptInterface
+        public void launchApp(String packageName) {
+            try {
+                Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
+                if (intent != null) {
+                    startActivity(intent);
+                }
+            } catch (Exception ignored) {}
+        }
 
         private File appsCacheFile() { return new File(getFilesDir(), "apps_cache.json"); }
 
