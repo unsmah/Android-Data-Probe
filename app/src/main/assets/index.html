@@ -3804,8 +3804,39 @@
   }
 
 
-  function loadUninstalledApks() {
-    $("appsGrid").innerHTML = '<div class="loading">Scanning storage for APKs…</div>';
+  let apksCache = null;
+
+  function renderApksGrid(arr) {
+    if (arr.length === 0) {
+      $("appsGrid").innerHTML = '<div class="empty">No uninstalled APK files found on device.<br><br><button class="btn" onclick="loadUninstalledApks(true)">↻ Refresh</button></div>';
+      return;
+    }
+    
+    $("appsGrid").innerHTML = '<div class="btn-row" style="margin-bottom:12px; justify-content:flex-end;">' +
+      '<button class="btn" onclick="loadUninstalledApks(true)">↻ Refresh</button></div>' +
+      '<div class="app-grid">' + arr.map(a => {
+      const icon = a.Icon
+        ? '<img src="' + a.Icon + '" alt="">'
+        : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
+      const dataStr = esc(JSON.stringify(a));
+      return '<div class="app-tile" data-apk="' + dataStr + '" title="' + esc(a.Path) + '">' +
+             icon + '<div class="label">' + esc(a.Name) + '</div></div>';
+    }).join("") + '</div>';
+
+    document.querySelectorAll("#appsGrid .app-tile[data-apk]").forEach(tile => {
+      tile.addEventListener("click", () => {
+        const data = JSON.parse(tile.dataset.apk.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+        openApkSheet(data);
+      });
+    });
+  }
+
+  function loadUninstalledApks(forceRefresh = false) {
+    if (!forceRefresh && apksCache !== null) {
+      renderApksGrid(apksCache);
+      return;
+    }
+    $("appsGrid").innerHTML = '<div class="loading">Scanning storage for APKs… (this may take a moment)</div>';
     setTimeout(() => {
       const arr = safeJSON(Android.getUninstalledApks(), []);
       
@@ -3818,26 +3849,8 @@
         return;
       }
 
-      if (arr.length === 0) {
-        $("appsGrid").innerHTML = '<div class="empty">No uninstalled APK files found on device.</div>';
-        return;
-      }
-      
-      $("appsGrid").innerHTML = '<div class="app-grid">' + arr.map(a => {
-        const icon = a.Icon
-          ? '<img src="' + a.Icon + '" alt="">'
-          : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
-        const dataStr = esc(JSON.stringify(a));
-        return '<div class="app-tile" data-apk="' + dataStr + '" title="' + esc(a.Path) + '">' +
-               icon + '<div class="label">' + esc(a.Name) + '</div></div>';
-      }).join("") + '</div>';
-
-      document.querySelectorAll("#appsGrid .app-tile[data-apk]").forEach(tile => {
-        tile.addEventListener("click", () => {
-          const data = JSON.parse(tile.dataset.apk.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
-          openApkSheet(data);
-        });
-      });
+      apksCache = arr;
+      renderApksGrid(apksCache);
     }, 50);
   }
 
@@ -3879,7 +3892,7 @@
 
   document.getElementById("asheetBtnInstall").addEventListener("click", () => {
     if (!currentApkData || !currentApkData.Uri) return;
-    Android.installBackedUpApk(currentApkData.Uri);
+    Android.installBackedUpApk(currentApkData.Uri, currentApkData.AbsolutePath || currentApkData.Path);
     closeApkSheet();
   });
 
@@ -3897,10 +3910,13 @@
       danger: true
     });
     if (ok) {
-      const success = Android.deleteBackedUpApk(currentApkData.Path, currentApkData.Uri);
+      const success = Android.deleteBackedUpApk(currentApkData.AbsolutePath || currentApkData.Path, currentApkData.Uri);
       if (success) {
         closeApkSheet();
-        loadUninstalledApks(); // Refresh grid
+        if (apksCache) {
+          apksCache = apksCache.filter(x => x.Uri !== currentApkData.Uri);
+          renderApksGrid(apksCache);
+        }
       } else {
         alert("Failed to delete file.");
       }
@@ -3945,7 +3961,7 @@
 
   document.getElementById("bsheetBtnInstall").addEventListener("click", () => {
     if (!currentBackup || !currentBackup.Uri) return;
-    Android.installBackedUpApk(currentBackup.Uri);
+    Android.installBackedUpApk(currentBackup.Uri, currentBackup.AbsolutePath || currentBackup.Path);
     closeBackupSheet();
   });
 
@@ -3967,7 +3983,7 @@
       danger: true
     });
     if (ok) {
-      const success = Android.deleteBackedUpApk(currentBackup.Path, currentBackup.Uri);
+      const success = Android.deleteBackedUpApk(currentBackup.AbsolutePath || currentBackup.Path, currentBackup.Uri);
       if (success) {
         closeBackupSheet();
         loadBackedUpApps(); // Refresh grid
