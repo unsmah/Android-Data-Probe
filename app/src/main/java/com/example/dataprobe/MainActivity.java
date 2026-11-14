@@ -1941,6 +1941,57 @@ public class MainActivity extends AppCompatActivity {
             return "Error: Unknown";
         }
 
+
+        @JavascriptInterface
+        public String getUninstalledApks() {
+            JSONArray arr = new JSONArray();
+            try {
+                Uri collection = MediaStore.Files.getContentUri("external");
+                String[] projection = { 
+                    MediaStore.Files.FileColumns._ID, 
+                    MediaStore.Files.FileColumns.DISPLAY_NAME,
+                    MediaStore.Files.FileColumns.DATA
+                };
+                String selection = MediaStore.Files.FileColumns.DATA + " LIKE ?";
+                String[] selectionArgs = { "%.apk" };
+
+                try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
+                    if (cursor != null) {
+                        while (cursor.moveToNext()) {
+                            long id = cursor.getLong(0);
+                            String name = cursor.getString(1);
+                            String dataPath = cursor.getString(2);
+                            
+                            if (name != null && name.endsWith(".apk") && dataPath != null) {
+                                // 1. Get package name from APK
+                                String pkg = null;
+                                PackageInfo info = getPackageManager().getPackageArchiveInfo(dataPath, 0);
+                                if (info != null) {
+                                    pkg = info.packageName;
+                                    // 2. Check if installed
+                                    try {
+                                        getPackageManager().getPackageInfo(pkg, 0);
+                                        // If this succeeds, it IS installed. Skip.
+                                        continue;
+                                    } catch (PackageManager.NameNotFoundException e) {
+                                        // Not installed, proceed to add
+                                    }
+                                }
+
+                                if (pkg != null) {
+                                    Uri fileUri = ContentUris.withAppendedId(collection, id);
+                                    addApkMetadataToJson(arr, name, dataPath, fileUri, dataPath);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                try { JSONObject err = new JSONObject(); err.put("error", e.getMessage()); arr.put(err); } catch (Exception ignored) {}
+            }
+            return arr.toString();
+        }
+
         @JavascriptInterface
         public String getBackedUpApps() {
             JSONArray arr = new JSONArray();

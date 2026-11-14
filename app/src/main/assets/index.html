@@ -1160,6 +1160,7 @@
       <button class="btn" data-filter="system">System apps</button>
       <button class="btn" data-filter="all">All</button>
       <button class="btn" data-filter="backedup">Backed up</button>
+      <button class="btn" data-filter="apks">APK packages</button>
     </div>
     <div id="appsGrid"></div>
   </section>
@@ -1220,6 +1221,34 @@
       <button class="sheet-action danger" id="bsheetBtnDelete">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
         <span>Delete Backup</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-overlay" id="apkSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-drag-handle"></div>
+    <div class="sheet-header">
+      <img id="asheetIcon" class="sheet-icon" src="" alt="" style="display:none;">
+      <div id="asheetIconFallback" class="sheet-icon-fallback">?</div>
+      <div class="sheet-header-text">
+        <div id="asheetName" class="sheet-app-name"></div>
+        <div id="asheetPackage" class="sheet-app-pkg"></div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-action" id="asheetBtnInstall">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Install</span>
+      </button>
+      <button class="sheet-action" id="asheetBtnLocation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        <span>Location</span>
+      </button>
+      <button class="sheet-action danger" id="asheetBtnDelete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        <span>Delete</span>
       </button>
     </div>
   </div>
@@ -3741,6 +3770,8 @@
       });
       if (currentFilter === "backedup") {
         loadBackedUpApps();
+      } else if (currentFilter === "apks") {
+        loadUninstalledApks();
       } else if (appsCache) {
         renderApps(appsCache, currentFilter);
       }
@@ -3771,6 +3802,100 @@
       });
     });
   }
+
+
+  function loadUninstalledApks() {
+    $("appsGrid").innerHTML = '<div class="loading">Scanning storage for APKs…</div>';
+    setTimeout(() => {
+      const arr = safeJSON(Android.getUninstalledApks(), []);
+      if (arr.length === 0 || arr[0].error) {
+        $("appsGrid").innerHTML = '<div class="empty">No uninstalled APK files found on device.</div>';
+        return;
+      }
+      
+      $("appsGrid").innerHTML = '<div class="app-grid">' + arr.map(a => {
+        const icon = a.Icon
+          ? '<img src="' + a.Icon + '" alt="">'
+          : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
+        const dataStr = esc(JSON.stringify(a));
+        return '<div class="app-tile" data-apk="' + dataStr + '" title="' + esc(a.Path) + '">' +
+               icon + '<div class="label">' + esc(a.Name) + '</div></div>';
+      }).join("") + '</div>';
+
+      document.querySelectorAll("#appsGrid .app-tile[data-apk]").forEach(tile => {
+        tile.addEventListener("click", () => {
+          const data = JSON.parse(tile.dataset.apk.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+          openApkSheet(data);
+        });
+      });
+    }, 50);
+  }
+
+  /* ===== APK Sheet JS ===== */
+  let currentApkData = null;
+
+  function openApkSheet(data) {
+    currentApkData = data;
+    document.getElementById("asheetName").textContent = data.Name;
+    document.getElementById("asheetPackage").textContent = data.Package || "Unknown package";
+
+    const img = document.getElementById("asheetIcon");
+    const fallback = document.getElementById("asheetIconFallback");
+    if (data.Icon && data.Icon.startsWith("data:image")) {
+      img.src = data.Icon;
+      img.style.display = "block";
+      fallback.style.display = "none";
+    } else {
+      img.style.display = "none";
+      fallback.style.display = "flex";
+      fallback.textContent = "APK";
+    }
+
+    const overlay = document.getElementById("apkSheetOverlay");
+    overlay.style.display = "flex";
+    void overlay.offsetWidth;
+    overlay.classList.add("show");
+  }
+
+  function closeApkSheet() {
+    const overlay = document.getElementById("apkSheetOverlay");
+    overlay.classList.remove("show");
+    setTimeout(() => { overlay.style.display = "none"; }, 300);
+  }
+
+  document.getElementById("apkSheetOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "apkSheetOverlay") closeApkSheet();
+  });
+
+  document.getElementById("asheetBtnInstall").addEventListener("click", () => {
+    if (!currentApkData || !currentApkData.Uri) return;
+    Android.installBackedUpApk(currentApkData.Uri);
+    closeApkSheet();
+  });
+
+  document.getElementById("asheetBtnLocation").addEventListener("click", () => {
+    if (!currentApkData) return;
+    alert("APK Path:\n\n" + currentApkData.Path);
+  });
+
+  document.getElementById("asheetBtnDelete").addEventListener("click", async () => {
+    if (!currentApkData || !currentApkData.Uri) return;
+    const ok = await showConfirm({
+      title: "Delete APK?",
+      message: "Are you sure you want to permanently delete this APK file from storage?",
+      confirmText: "Delete",
+      danger: true
+    });
+    if (ok) {
+      const success = Android.deleteBackedUpApk(currentApkData.Uri);
+      if (success) {
+        closeApkSheet();
+        loadUninstalledApks(); // Refresh grid
+      } else {
+        alert("Failed to delete file.");
+      }
+    }
+  });
 
   /* ===== Backed Up App Sheet JS ===== */
   let currentBackup = null;
