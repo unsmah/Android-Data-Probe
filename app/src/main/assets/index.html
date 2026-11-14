@@ -3808,7 +3808,17 @@
     $("appsGrid").innerHTML = '<div class="loading">Scanning storage for APKs…</div>';
     setTimeout(() => {
       const arr = safeJSON(Android.getUninstalledApks(), []);
-      if (arr.length === 0 || arr[0].error) {
+      
+      // Handle permission requirement
+      if (arr.length > 0 && arr[0].error === "need_permission") {
+        $("appsGrid").innerHTML = '<div class="empty" style="padding: 30px 20px; text-align: center;">' +
+          '<p style="margin-bottom: 16px;">To scan for APK files, the app needs "All files access" permission.</p>' +
+          '<button class="btn btn-primary" onclick="Android.requestAllFilesAccess()">Grant Permission</button>' +
+          '</div>';
+        return;
+      }
+
+      if (arr.length === 0) {
         $("appsGrid").innerHTML = '<div class="empty">No uninstalled APK files found on device.</div>';
         return;
       }

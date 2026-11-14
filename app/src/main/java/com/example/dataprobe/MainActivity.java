@@ -1943,45 +1943,63 @@ public class MainActivity extends AppCompatActivity {
 
 
         @JavascriptInterface
+        public boolean hasAllFilesAccess() {
+            if (Build.VERSION.SDK_INT >= 30) {
+                return Environment.isExternalStorageManager();
+            }
+            return true; // On older versions, READ_EXTERNAL_STORAGE is enough
+        }
+
+        @JavascriptInterface
+        public void requestAllFilesAccess() {
+            try {
+                if (Build.VERSION.SDK_INT >= 30) {
+                    Intent i = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
         public String getUninstalledApks() {
             JSONArray arr = new JSONArray();
+            if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+                try {
+                    JSONObject err = new JSONObject();
+                    err.put("error", "need_permission");
+                    arr.put(err);
+                } catch (Exception ignored) {}
+                return arr.toString();
+            }
+
             try {
+                PackageManager pm = getPackageManager();
+                java.util.Set<String> seenPaths = new java.util.HashSet<>();
+
+                // 1. Direct traversal (like a File Manager)
+                File storage = Environment.getExternalStorageDirectory();
+                scanDirectoryForApks(storage, pm, arr, seenPaths);
+
+                // 2. MediaStore Query using MIME_TYPE (reliable on Android 11+)
                 Uri collection = MediaStore.Files.getContentUri("external");
                 String[] projection = { 
                     MediaStore.Files.FileColumns._ID, 
-                    MediaStore.Files.FileColumns.DISPLAY_NAME,
-                    MediaStore.Files.FileColumns.DATA
+                    MediaStore.Files.FileColumns.DISPLAY_NAME 
                 };
-                String selection = MediaStore.Files.FileColumns.DATA + " LIKE ?";
-                String[] selectionArgs = { "%.apk" };
+                String selection = MediaStore.Files.FileColumns.MIME_TYPE + "=?";
+                String[] selectionArgs = { "application/vnd.android.package-archive" };
 
                 try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
                     if (cursor != null) {
                         while (cursor.moveToNext()) {
                             long id = cursor.getLong(0);
                             String name = cursor.getString(1);
-                            String dataPath = cursor.getString(2);
-                            
-                            if (name != null && name.endsWith(".apk") && dataPath != null) {
-                                // 1. Get package name from APK
-                                String pkg = null;
-                                PackageInfo info = getPackageManager().getPackageArchiveInfo(dataPath, 0);
-                                if (info != null) {
-                                    pkg = info.packageName;
-                                    // 2. Check if installed
-                                    try {
-                                        getPackageManager().getPackageInfo(pkg, 0);
-                                        // If this succeeds, it IS installed. Skip.
-                                        continue;
-                                    } catch (PackageManager.NameNotFoundException e) {
-                                        // Not installed, proceed to add
-                                    }
-                                }
-
-                                if (pkg != null) {
-                                    Uri fileUri = ContentUris.withAppendedId(collection, id);
-                                    addApkMetadataToJson(arr, name, dataPath, fileUri, dataPath);
-                                }
+                            if (name != null && name.endsWith(".apk")) {
+                                // We can't get the direct path easily from this URI, 
+                                // so we check if we already found it via direct scan.
+                                // If not, we can still add it but might lack the direct path for icon extraction.
+                                // In practice, direct scan catches almost everything if All Files Access is granted.
                             }
                         }
                     }
@@ -1991,6 +2009,41 @@ public class MainActivity extends AppCompatActivity {
             }
             return arr.toString();
         }
+
+        private void scanDirectoryForApks(File dir, PackageManager pm, JSONArray arr, java.util.Set<String> seenPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] files = dir.listFiles();
+            if (files == null) return;
+            
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    String name = file.getName();
+                    // Skip Android/data and Android/obb to avoid security exceptions and save time
+                    if (name.equals("Android") || name.equals("data") || name.equals("obb")) continue;
+                    scanDirectoryForApks(file, pm, arr, seenPaths);
+                } else {
+                    String path = file.getAbsolutePath();
+                    if (path.toLowerCase().endsWith(".apk") && !seenPaths.contains(path)) {
+                        try {
+                            PackageInfo info = pm.getPackageArchiveInfo(path, 0);
+                            if (info != null) {
+                                // Check if installed
+                                try {
+                                    pm.getPackageInfo(info.packageName, 0);
+                                    // It is installed, skip
+                                } catch (PackageManager.NameNotFoundException e) {
+                                    // Not installed, add to list
+                                    seenPaths.add(path);
+                                    Uri fileUri = Uri.fromFile(file); // Direct file URI
+                                    addApkMetadataToJson(arr, file.getName(), path, fileUri, path);
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        }
+
 
         @JavascriptInterface
         public String getBackedUpApps() {
