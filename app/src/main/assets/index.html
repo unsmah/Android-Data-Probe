@@ -3678,6 +3678,16 @@
     }
   });
 
+  window.onAppUninstalled = function (pkg) {
+    // Remove from local cache
+    if (appsCache) {
+      appsCache = appsCache.filter(a => a.Package !== pkg);
+      renderApps(appsCache, currentFilter);
+    }
+    // Show the success popup
+    showAlert("Uninstalled", "The app was uninstalled successfully.");
+  };
+
   window.onAppsLoaded = apps => {
     clearTimeout(appsTimeout);
     appsCache = apps;

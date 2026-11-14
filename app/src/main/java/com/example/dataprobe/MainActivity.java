@@ -125,6 +125,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean liveWifiScanning = false;
     private final Map<String, JSONObject> btSeen = new HashMap<>();
     private final Handler scanHandler = new Handler(Looper.getMainLooper());
+    private String pendingUninstallPackage = null;
+    private BroadcastReceiver packageRemovedReceiver = null;
     private GnssStatus.Callback gnssCallback;
     private volatile int gnssSatellites = 0;
     private volatile int gnssUsedInFix = 0;
@@ -150,6 +152,61 @@ public class MainActivity extends AppCompatActivity {
     private static final int LOCATION_HISTORY_MAX = 500;
     private static final int LIVE_SCAN_INTERVAL_MS = 35000;
     private static final long CONNECTION_DEBOUNCE_MS = 5 * 60 * 1000L;
+
+
+    private void registerPackageRemovedReceiver() {
+        if (packageRemovedReceiver != null) return;
+        packageRemovedReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())) {
+                    boolean replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
+                    if (replacing) return;
+                    Uri data = intent.getData();
+                    if (data != null) {
+                        String pkg = data.getSchemeSpecificPart();
+                        if (pkg != null && pkg.equals(pendingUninstallPackage)) {
+                            pendingUninstallPackage = null;
+                            removeFromAppsCache(pkg);
+                            final String js = "window.onAppUninstalled('" + pkg.replace("'", "\\'") + "')";
+                            webView.post(() -> webView.evaluateJavascript(js, null));
+                        }
+                    }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addDataScheme("package");
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(packageRemovedReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(packageRemovedReceiver, filter);
+        }
+    }
+
+    private void unregisterPackageRemovedReceiver() {
+        if (packageRemovedReceiver != null) {
+            try { unregisterReceiver(packageRemovedReceiver); } catch (Exception ignored) {}
+            packageRemovedReceiver = null;
+        }
+    }
+
+    private void removeFromAppsCache(String pkg) {
+        try {
+            File f = new File(getFilesDir(), "apps_cache.json");
+            if (!f.exists()) return;
+            String content = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            JSONArray arr = new JSONArray(content);
+            JSONArray newArr = new JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                if (!pkg.equals(obj.optString("Package"))) {
+                    newArr.put(obj);
+                }
+            }
+            Files.write(f.toPath(), newArr.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -431,6 +488,7 @@ public class MainActivity extends AppCompatActivity {
         scanHandler.postDelayed(MainActivity.this::pushAllData, 800);
         startGnssUpdates();
         registerTrackingReceiver();
+        registerPackageRemovedReceiver();
     }
 
     @Override
@@ -438,6 +496,7 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         stopGnssUpdates();
         unregisterTrackingReceiver();
+        unregisterPackageRemovedReceiver();
     }
 
     private void pushPermissionStatus() {
@@ -1815,6 +1874,7 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void uninstallApp(String pkg) {
             try {
+                pendingUninstallPackage = pkg;
                 Intent i = new Intent(Intent.ACTION_DELETE);
                 i.setData(Uri.parse("package:" + pkg));
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
