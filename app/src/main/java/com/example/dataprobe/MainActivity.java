@@ -2107,20 +2107,37 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
-        private void addApkMetadataToJson(PackageManager pm, JSONArray arr, String fileName, String path, Uri uri, long size) {
+        private void addApkMetadataToJson(JSONArray arr, String fileName, String displayPath, Uri uri, String dataPath) {
             try {
                 JSONObject o = new JSONObject();
                 o.put("Name", fileName.replace(".apk", ""));
-                o.put("Path", path);
+                o.put("Path", displayPath);
                 o.put("Uri", uri.toString());
-                o.put("Size", humanBytes(size));
-                
-                // Extract icon and real package name from the APK file itself
-                PackageInfo info = pm.getPackageArchiveInfo(path, 0);
+                if (dataPath != null) o.put("AbsolutePath", dataPath);
+
+                // getPackageArchiveInfo REQUIRES a real file path.
+                String pathToUse = dataPath;
+                File tempFile = null;
+
+                if (pathToUse == null || !new File(pathToUse).exists()) {
+                    // Fall back to copying the content:// URI to a temp file
+                    tempFile = File.createTempFile("temp_apk", ".apk", getCacheDir());
+                    try (InputStream in = getContentResolver().openInputStream(uri);
+                         OutputStream out = new FileOutputStream(tempFile)) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                    }
+                    pathToUse = tempFile.getAbsolutePath();
+                }
+
+                PackageManager pm = getPackageManager();
+                PackageInfo info = pm.getPackageArchiveInfo(pathToUse, 0);
                 if (info != null && info.applicationInfo != null) {
                     o.put("Package", info.packageName);
-                    info.applicationInfo.sourceDir = path;
-                    info.applicationInfo.publicSourceDir = path;
+
+                    info.applicationInfo.sourceDir = pathToUse;
+                    info.applicationInfo.publicSourceDir = pathToUse;
                     Drawable icon = pm.getApplicationIcon(info.applicationInfo);
                     Bitmap bm = drawableToBitmap(icon, 56);
                     if (bm != null) {
@@ -2129,6 +2146,8 @@ public class MainActivity extends AppCompatActivity {
                         o.put("Icon", "data:image/png;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
                     }
                 }
+
+                if (tempFile != null) tempFile.delete();
                 arr.put(o);
             } catch (Exception ignored) {}
         }
