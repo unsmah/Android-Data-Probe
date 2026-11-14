@@ -3779,28 +3779,37 @@
   });
 
   function loadBackedUpApps() {
-    const arr = safeJSON(Android.getBackedUpApps(), []);
-    $("appsGrid").innerHTML = arr.length
-      ? '<div class="app-grid">' + arr.map(a => {
-          const icon = a.Icon
-            ? '<img src="' + a.Icon + '" alt="">'
-            : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
-          
-          // Store the whole object as a JSON string in a data attribute
-          const dataStr = esc(JSON.stringify(a));
-          
-          return '<div class="app-tile" data-backup="' + dataStr + '" title="' + esc(a.Path) + '">' +
-                 icon + '<div class="label">' + esc(a.Name) + '</div></div>';
-        }).join("") + '</div>'
-      : '<div class="empty">No backups found yet. Tap any app and select "Backup APK".</div>';
+    // 50ms delay lets the "Loading..." spinner render before the heavy Java call blocks the thread
+    setTimeout(() => {
+      let arr = [];
+      try {
+        arr = safeJSON(Android.getBackedUpApps(), []);
+        if (!Array.isArray(arr)) arr = [];
+        if (arr.length > 0 && arr[0].error) arr = []; // Handle Java error response
+      } catch (e) {
+        arr = [];
+      }
 
-    // Wire up clicks
-    document.querySelectorAll("#appsGrid .app-tile[data-backup]").forEach(tile => {
-      tile.addEventListener("click", () => {
-        const data = JSON.parse(tile.dataset.backup.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
-        openBackupSheet(data);
+      $("appsGrid").innerHTML = arr.length
+        ? '<div class="app-grid">' + arr.map(a => {
+            const icon = a.Icon
+              ? '<img src="' + a.Icon + '" alt="">'
+              : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
+            
+            const dataStr = esc(JSON.stringify(a));
+            
+            return '<div class="app-tile" data-backup="' + dataStr + '" title="' + esc(a.Path) + '">' +
+                   icon + '<div class="label">' + esc(a.Name) + '</div></div>';
+          }).join("") + '</div>'
+        : '<div class="empty">No backups found yet.<br><br><button class="btn" onclick="loadBackedUpApps()">↻ Refresh</button></div>';
+
+      document.querySelectorAll("#appsGrid .app-tile[data-backup]").forEach(tile => {
+        tile.addEventListener("click", () => {
+          const data = JSON.parse(tile.dataset.backup.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+          openBackupSheet(data);
+        });
       });
-    });
+    }, 50);
   }
 
 
