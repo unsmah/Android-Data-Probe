@@ -95,6 +95,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.provider.MediaStore;
@@ -1943,9 +1944,10 @@ public class MainActivity extends AppCompatActivity {
         public String getBackedUpApps() {
             JSONArray arr = new JSONArray();
             try {
+                PackageManager pm = getPackageManager();
                 if (Build.VERSION.SDK_INT >= 29) {
                     Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
-                    String[] projection = { MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE };
+                    String[] projection = { MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE };
                     String selection = MediaStore.Downloads.RELATIVE_PATH + "=?";
                     String[] selectionArgs = { Environment.DIRECTORY_DOWNLOADS + "/Probe Backup/" };
                     try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
@@ -1953,11 +1955,9 @@ public class MainActivity extends AppCompatActivity {
                             while (cursor.moveToNext()) {
                                 String name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME));
                                 if (name != null && name.endsWith(".apk")) {
-                                    JSONObject o = new JSONObject();
-                                    o.put("Name", name.replace(".apk", ""));
-                                    o.put("Path", "Download/Probe Backup/" + name);
-                                    o.put("Size", humanBytes(cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE))));
-                                    arr.put(o);
+                                    long id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID));
+                                    Uri fileUri = ContentUris.withAppendedId(collection, id);
+                                    addApkMetadataToJson(pm, arr, name, "Download/Probe Backup/" + name, fileUri, cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)));
                                 }
                             }
                         }
@@ -1968,18 +1968,74 @@ public class MainActivity extends AppCompatActivity {
                         File[] files = dir.listFiles((d, n) -> n.endsWith(".apk"));
                         if (files != null) {
                             for (File f : files) {
-                                JSONObject o = new JSONObject();
-                                o.put("Name", f.getName().replace(".apk", ""));
-                                o.put("Path", "Download/Probe Backup/" + f.getName());
-                                o.put("Size", humanBytes(f.length()));
-                                arr.put(o);
+                                addApkMetadataToJson(pm, arr, f.getName(), "Download/Probe Backup/" + f.getName(), Uri.fromFile(f), f.length());
                             }
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                try { JSONObject err = new JSONObject(); err.put("error", e.getMessage()); arr.put(err); } catch (Exception ignored) {}
+            }
             return arr.toString();
         }
+
+        private void addApkMetadataToJson(PackageManager pm, JSONArray arr, String fileName, String path, Uri uri, long size) {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("Name", fileName.replace(".apk", ""));
+                o.put("Path", path);
+                o.put("Uri", uri.toString());
+                o.put("Size", humanBytes(size));
+                
+                // Extract icon and real package name from the APK file itself
+                PackageInfo info = pm.getPackageArchiveInfo(path, 0);
+                if (info != null && info.applicationInfo != null) {
+                    o.put("Package", info.packageName);
+                    info.applicationInfo.sourceDir = path;
+                    info.applicationInfo.publicSourceDir = path;
+                    Drawable icon = pm.getApplicationIcon(info.applicationInfo);
+                    Bitmap bm = drawableToBitmap(icon, 56);
+                    if (bm != null) {
+                        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                        bm.compress(Bitmap.CompressFormat.PNG, 70, bos);
+                        o.put("Icon", "data:image/png;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
+                    }
+                }
+                arr.put(o);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void installBackedUpApk(String uriString) {
+            try {
+                Uri uri = Uri.parse(uriString);
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(uri, "application/vnd.android.package-archive");
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(i);
+            } catch (Exception e) {
+                webView.post(() -> webView.evaluateJavascript(
+                    "alert('Install failed: " + e.getMessage().replace("'", "\\'") + "')", null));
+            }
+        }
+
+        @JavascriptInterface
+        public boolean deleteBackedUpApk(String uriString) {
+            try {
+                Uri uri = Uri.parse(uriString);
+                if ("file".equals(uri.getScheme())) {
+                    File f = new File(uri.getPath());
+                    return f.delete();
+                } else {
+                    int rows = getContentResolver().delete(uri, null, null);
+                    return rows > 0;
+                }
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
 
         @JavascriptInterface
         public String getDeviceOverview() {

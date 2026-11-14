@@ -1197,6 +1197,34 @@
   </div>
 </div>
 
+<div class="sheet-overlay" id="backupSheetOverlay">
+  <div class="sheet">
+    <div class="sheet-drag-handle"></div>
+    <div class="sheet-header">
+      <img id="bsheetIcon" class="sheet-icon" src="" alt="" style="display:none;">
+      <div id="bsheetIconFallback" class="sheet-icon-fallback">?</div>
+      <div class="sheet-header-text">
+        <div id="bsheetName" class="sheet-app-name"></div>
+        <div id="bsheetPackage" class="sheet-app-pkg"></div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-action" id="bsheetBtnInstall">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Install</span>
+      </button>
+      <button class="sheet-action" id="bsheetBtnInfo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>App info</span>
+      </button>
+      <button class="sheet-action danger" id="bsheetBtnDelete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        <span>Delete Backup</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <nav class="tabbar">
   <button data-tab="home" class="active">
     <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-7h-6v7H4a1 1 0 01-1-1z"/></svg>
@@ -3723,12 +3751,96 @@
     const arr = safeJSON(Android.getBackedUpApps(), []);
     $("appsGrid").innerHTML = arr.length
       ? '<div class="app-grid">' + arr.map(a => {
-          const fallback = '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
-          return '<div class="app-tile" title="' + esc(a.Path) + '">' +
-                 fallback + '<div class="label">' + esc(a.Name) + '</div></div>';
+          const icon = a.Icon
+            ? '<img src="' + a.Icon + '" alt="">'
+            : '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
+          
+          // Store the whole object as a JSON string in a data attribute
+          const dataStr = esc(JSON.stringify(a));
+          
+          return '<div class="app-tile" data-backup="' + dataStr + '" title="' + esc(a.Path) + '">' +
+                 icon + '<div class="label">' + esc(a.Name) + '</div></div>';
         }).join("") + '</div>'
       : '<div class="empty">No backups found yet. Tap any app and select "Backup APK".</div>';
+
+    // Wire up clicks
+    document.querySelectorAll("#appsGrid .app-tile[data-backup]").forEach(tile => {
+      tile.addEventListener("click", () => {
+        const data = JSON.parse(tile.dataset.backup.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+        openBackupSheet(data);
+      });
+    });
   }
+
+  /* ===== Backed Up App Sheet JS ===== */
+  let currentBackup = null;
+
+  function openBackupSheet(data) {
+    currentBackup = data;
+    document.getElementById("bsheetName").textContent = data.Name;
+    document.getElementById("bsheetPackage").textContent = data.Package || data.Path;
+
+    const img = document.getElementById("bsheetIcon");
+    const fallback = document.getElementById("bsheetIconFallback");
+    if (data.Icon && data.Icon.startsWith("data:image")) {
+      img.src = data.Icon;
+      img.style.display = "block";
+      fallback.style.display = "none";
+    } else {
+      img.style.display = "none";
+      fallback.style.display = "flex";
+      fallback.textContent = "APK";
+    }
+
+    const overlay = document.getElementById("backupSheetOverlay");
+    overlay.style.display = "flex";
+    void overlay.offsetWidth;
+    overlay.classList.add("show");
+  }
+
+  function closeBackupSheet() {
+    const overlay = document.getElementById("backupSheetOverlay");
+    overlay.classList.remove("show");
+    setTimeout(() => { overlay.style.display = "none"; }, 300);
+  }
+
+  document.getElementById("backupSheetOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "backupSheetOverlay") closeBackupSheet();
+  });
+
+  document.getElementById("bsheetBtnInstall").addEventListener("click", () => {
+    if (!currentBackup || !currentBackup.Uri) return;
+    Android.installBackedUpApk(currentBackup.Uri);
+    closeBackupSheet();
+  });
+
+  document.getElementById("bsheetBtnInfo").addEventListener("click", () => {
+    if (!currentBackup || !currentBackup.Package) {
+      alert("Package information not found in APK.");
+      return;
+    }
+    Android.openAppInfo(currentBackup.Package);
+    closeBackupSheet();
+  });
+
+  document.getElementById("bsheetBtnDelete").addEventListener("click", async () => {
+    if (!currentBackup || !currentBackup.Uri) return;
+    const ok = await showConfirm({
+      title: "Delete backup?",
+      message: "Are you sure you want to delete the backup file for " + currentBackup.Name + "?",
+      confirmText: "Delete",
+      danger: true
+    });
+    if (ok) {
+      const success = Android.deleteBackedUpApk(currentBackup.Uri);
+      if (success) {
+        closeBackupSheet();
+        loadBackedUpApps(); // Refresh grid
+      } else {
+        alert("Failed to delete file.");
+      }
+    }
+  });
 
   function renderApps(apps, filter) {
     const list = apps.filter(a => filter === "all" || a.Type === filter);
