@@ -1945,31 +1945,28 @@ public class MainActivity extends AppCompatActivity {
         public String getBackedUpApps() {
             JSONArray arr = new JSONArray();
             try {
-                PackageManager pm = getPackageManager();
-                if (Build.VERSION.SDK_INT >= 29) {
-                    Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
-                    String[] projection = { MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE };
-                    String selection = MediaStore.Downloads.RELATIVE_PATH + "=?";
-                    String[] selectionArgs = { Environment.DIRECTORY_DOWNLOADS + "/Probe Backup/" };
-                    try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
-                        if (cursor != null) {
-                            while (cursor.moveToNext()) {
-                                String name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME));
-                                if (name != null && name.endsWith(".apk")) {
-                                    long id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID));
-                                    Uri fileUri = ContentUris.withAppendedId(collection, id);
-                                    addApkMetadataToJson(pm, arr, name, "Download/Probe Backup/" + name, fileUri, cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)));
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Probe Backup");
-                    if (dir.exists()) {
-                        File[] files = dir.listFiles((d, n) -> n.endsWith(".apk"));
-                        if (files != null) {
-                            for (File f : files) {
-                                addApkMetadataToJson(pm, arr, f.getName(), "Download/Probe Backup/" + f.getName(), Uri.fromFile(f), f.length());
+                // Use MediaStore.Files to bypass the app-specific scoping rule
+                // that hides files created by the previous installation.
+                Uri collection = MediaStore.Files.getContentUri("external");
+                String[] projection = { 
+                    MediaStore.Files.FileColumns._ID, 
+                    MediaStore.Files.FileColumns.DISPLAY_NAME,
+                    MediaStore.Files.FileColumns.DATA // Path
+                };
+                // Query for any file ending in .apk inside the Probe Backup folder
+                String selection = MediaStore.Files.FileColumns.DATA + " LIKE ?";
+                String[] selectionArgs = { "%/Probe Backup/%.apk" };
+
+                try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
+                    if (cursor != null) {
+                        while (cursor.moveToNext()) {
+                            long id = cursor.getLong(0);
+                            String name = cursor.getString(1);
+                            String dataPath = cursor.getString(2);
+                            
+                            if (name != null && name.endsWith(".apk")) {
+                                Uri fileUri = ContentUris.withAppendedId(collection, id);
+                                addApkMetadataToJson(arr, name, "Download/Probe Backup/" + name, fileUri, dataPath);
                             }
                         }
                     }
@@ -1979,6 +1976,77 @@ public class MainActivity extends AppCompatActivity {
             }
             return arr.toString();
         }
+
+        private void addApkMetadataToJson(JSONArray arr, String fileName, String displayPath, Uri uri, String dataPath) {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("Name", fileName.replace(".apk", ""));
+                o.put("Path", displayPath);
+                o.put("Uri", uri.toString());
+                
+                // getPackageArchiveInfo REQUIRES a real file path.
+                // If dataPath is available use it, otherwise copy to cache.
+                String pathToUse = dataPath;
+                File tempFile = null;
+
+                if (pathToUse == null || !new File(pathToUse).exists()) {
+                    tempFile = File.createTempFile("temp_apk", ".apk", getCacheDir());
+                    try (InputStream in = getContentResolver().openInputStream(uri);
+                         OutputStream out = new FileOutputStream(tempFile)) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                    }
+                    pathToUse = tempFile.getAbsolutePath();
+                }
+
+                PackageManager pm = getPackageManager();
+                PackageInfo info = pm.getPackageArchiveInfo(pathToUse, 0);
+                if (info != null && info.applicationInfo != null) {
+                    o.put("Package", info.packageName);
+                    
+                    info.applicationInfo.sourceDir = pathToUse;
+                    info.applicationInfo.publicSourceDir = pathToUse;
+                    Drawable icon = pm.getApplicationIcon(info.applicationInfo);
+                    Bitmap bm = drawableToBitmap(icon, 56);
+                    if (bm != null) {
+                        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                        bm.compress(Bitmap.CompressFormat.PNG, 70, bos);
+                        o.put("Icon", "data:image/png;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
+                    }
+                }
+                
+                if (tempFile != null) tempFile.delete();
+                arr.put(o);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void installBackedUpApk(String uriString) {
+            try {
+                Uri uri = Uri.parse(uriString);
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(uri, "application/vnd.android.package-archive");
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(i);
+            } catch (Exception e) {
+                webView.post(() -> webView.evaluateJavascript(
+                    "alert('Install failed. Make sure you allow this app to install unknown apps in settings.')", null));
+            }
+        }
+
+        @JavascriptInterface
+        public boolean deleteBackedUpApk(String uriString) {
+            try {
+                Uri uri = Uri.parse(uriString);
+                int rows = getContentResolver().delete(uri, null, null);
+                return rows > 0;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
 
         private void addApkMetadataToJson(PackageManager pm, JSONArray arr, String fileName, String path, Uri uri, long size) {
             try {
