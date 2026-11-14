@@ -98,6 +98,7 @@ import java.util.Enumeration;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.provider.MediaStore;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
