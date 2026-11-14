@@ -851,6 +851,77 @@
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+  /* ===== Bottom sheet ===== */
+  .sheet-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    display: none; align-items: flex-end;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .sheet-overlay.show { display: flex; opacity: 1; }
+  .sheet {
+    width: 100%;
+    background: #12151f;
+    border-radius: 20px 20px 0 0;
+    padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+  }
+  .sheet-overlay.show .sheet { transform: translateY(0); }
+  .sheet-drag-handle {
+    width: 36px; height: 4px;
+    background: #3a4152; border-radius: 2px;
+    margin: 8px auto 16px;
+  }
+  .sheet-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 22px;
+  }
+  .sheet-icon, .sheet-icon-fallback {
+    width: 48px; height: 48px;
+    border-radius: 12px; object-fit: contain;
+    background: #1b202c; flex-shrink: 0;
+  }
+  .sheet-icon-fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700; color: var(--accent);
+    border: 1px solid #232a3a;
+  }
+  .sheet-header-text { min-width: 0; flex: 1; }
+  .sheet-app-name {
+    font-size: 16px; font-weight: 600; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-bottom: 3px;
+  }
+  .sheet-app-pkg {
+    font-size: 12px; color: var(--text-faint);
+    font-family: ui-monospace, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sheet-actions {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .sheet-action {
+    display: flex; align-items: center; gap: 14px;
+    width: 100%; padding: 15px 14px;
+    background: none; border: none;
+    border-radius: 12px;
+    color: var(--text);
+    font: inherit; font-size: 15px; font-weight: 500;
+    text-align: left; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sheet-action:active { background: rgba(255,255,255,0.06); }
+  .sheet-action svg {
+    width: 22px; height: 22px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .sheet-action.danger { color: #f08c8c; }
+  .sheet-action.danger svg { color: #f08c8c; }
 </style>
 </head>
 <body>
@@ -1092,6 +1163,34 @@
     <div id="appsGrid"></div>
   </section>
 </main>
+
+<div class="sheet-overlay" id="appSheetOverlay">
+  <div class="sheet" id="appSheet">
+    <div class="sheet-drag-handle"></div>
+    <div class="sheet-header">
+      <img id="sheetIcon" class="sheet-icon" src="" alt="" style="display:none;">
+      <div id="sheetIconFallback" class="sheet-icon-fallback">?</div>
+      <div class="sheet-header-text">
+        <div id="sheetName" class="sheet-app-name"></div>
+        <div id="sheetPackage" class="sheet-app-pkg"></div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-action" id="sheetBtnOpen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <span>Open</span>
+      </button>
+      <button class="sheet-action" id="sheetBtnInfo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>App info</span>
+      </button>
+      <button class="sheet-action danger" id="sheetBtnUninstall">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        <span>Uninstall</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <nav class="tabbar">
   <button data-tab="home" class="active">
@@ -3608,11 +3707,76 @@
           const icon = a.Icon
             ? '<img src="' + a.Icon + '" alt="">'
             : '<div class="fallback">' + esc((a.Name[0] || "?").toUpperCase()) + '</div>';
-          return '<div class="app-tile" title="' + esc(a.Package) + '">' +
+          return '<div class="app-tile" data-pkg="' + esc(a.Package) +
+                 '" data-name="' + esc(a.Name) +
+                 '" data-icon="' + esc(a.Icon || "") +
+                 '" title="' + esc(a.Package) + '">' +
                  icon + '<div class="label">' + esc(a.Name) + '</div></div>';
         }).join("") + '</div>'
       : '<div class="empty">No apps in this filter.</div>';
+
+    // Wire clicks to open the bottom sheet
+    document.querySelectorAll("#appsGrid .app-tile").forEach(tile => {
+      tile.addEventListener("click", () => {
+        openAppSheet(tile.dataset.pkg, tile.dataset.name, tile.dataset.icon);
+      });
+    });
   }
+
+  /* ===== App action bottom sheet ===== */
+  let currentSheetPkg = null;
+
+  function openAppSheet(pkg, name, icon) {
+    currentSheetPkg = pkg;
+    document.getElementById("sheetName").textContent = name;
+    document.getElementById("sheetPackage").textContent = pkg;
+
+    const img = document.getElementById("sheetIcon");
+    const fallback = document.getElementById("sheetIconFallback");
+    if (icon && icon.startsWith("data:image")) {
+      img.src = icon;
+      img.style.display = "block";
+      fallback.style.display = "none";
+    } else {
+      img.style.display = "none";
+      fallback.style.display = "flex";
+      fallback.textContent = (name[0] || "?").toUpperCase();
+    }
+
+    const overlay = document.getElementById("appSheetOverlay");
+    overlay.style.display = "flex";
+    void overlay.offsetWidth;
+    overlay.classList.add("show");
+  }
+
+  function closeAppSheet() {
+    const overlay = document.getElementById("appSheetOverlay");
+    overlay.classList.remove("show");
+    setTimeout(() => { overlay.style.display = "none"; }, 300);
+  }
+
+  document.getElementById("appSheetOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "appSheetOverlay") closeAppSheet();
+  });
+
+  document.getElementById("sheetBtnOpen").addEventListener("click", () => {
+    if (!currentSheetPkg) return;
+    const ok = Android.launchApp(currentSheetPkg);
+    if (!ok) alert("This app has no launchable activity.");
+    closeAppSheet();
+  });
+
+  document.getElementById("sheetBtnInfo").addEventListener("click", () => {
+    if (!currentSheetPkg) return;
+    Android.openAppInfo(currentSheetPkg);
+    closeAppSheet();
+  });
+
+  document.getElementById("sheetBtnUninstall").addEventListener("click", () => {
+    if (!currentSheetPkg) return;
+    Android.uninstallApp(currentSheetPkg);
+    closeAppSheet();
+  });
 
   /* Load apps cache on startup */
   (function loadAppsFromCache() {

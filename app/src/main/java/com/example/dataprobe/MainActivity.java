@@ -1784,6 +1784,44 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
 
+
+        /* ==================================================
+           Installed apps — actions
+           ================================================== */
+
+        @JavascriptInterface
+        public boolean launchApp(String pkg) {
+            try {
+                Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (i != null) {
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                    return true;
+                }
+            } catch (Exception ignored) {}
+            return false;
+        }
+
+        @JavascriptInterface
+        public void openAppInfo(String pkg) {
+            try {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                i.setData(Uri.parse("package:" + pkg));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void uninstallApp(String pkg) {
+            try {
+                Intent i = new Intent(Intent.ACTION_DELETE);
+                i.setData(Uri.parse("package:" + pkg));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
         @JavascriptInterface
         public String getDeviceOverview() {
             JSONObject o = new JSONObject();
