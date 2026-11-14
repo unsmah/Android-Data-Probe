@@ -3897,7 +3897,7 @@
       danger: true
     });
     if (ok) {
-      const success = Android.deleteBackedUpApk(currentApkData.Uri);
+      const success = Android.deleteBackedUpApk(currentApkData.Path, currentApkData.Uri);
       if (success) {
         closeApkSheet();
         loadUninstalledApks(); // Refresh grid
@@ -3967,7 +3967,7 @@
       danger: true
     });
     if (ok) {
-      const success = Android.deleteBackedUpApk(currentBackup.Uri);
+      const success = Android.deleteBackedUpApk(currentBackup.Path, currentBackup.Uri);
       if (success) {
         closeBackupSheet();
         loadBackedUpApps(); // Refresh grid

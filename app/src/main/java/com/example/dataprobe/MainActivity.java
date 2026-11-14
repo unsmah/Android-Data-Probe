@@ -99,6 +99,7 @@ import java.util.Enumeration;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -273,6 +274,17 @@ public class MainActivity extends AppCompatActivity {
         registerStateReceiver();
         registerWifiConnectionReceiver();
         requestRuntimePermissions();
+        
+        // Request All Files Access immediately on first launch (Android 11+)
+        if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    Intent i = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception ignored) {}
+            }, 1500); // 1.5s delay so the UI loads first
+        }
     }
 
     /* ================= OUI database ================= */
@@ -2141,14 +2153,27 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public boolean deleteBackedUpApk(String uriString) {
+        public boolean deleteBackedUpApk(String path, String uriString) {
             try {
-                Uri uri = Uri.parse(uriString);
-                int rows = getContentResolver().delete(uri, null, null);
-                return rows > 0;
-            } catch (Exception e) {
-                return false;
-            }
+                if (path != null) {
+                    File f = new File(path);
+                    if (f.exists() && f.delete()) return true;
+                }
+                if (uriString != null) {
+                    Uri uri = Uri.parse(uriString);
+                    if ("file".equals(uri.getScheme())) {
+                        File f = new File(uri.getPath());
+                        return f.delete();
+                    } else {
+                        try {
+                            if (Build.VERSION.SDK_INT >= 29 && DocumentsContract.deleteDocument(getContentResolver(), uri)) return true;
+                        } catch (Exception ignored) {}
+                        int rows = getContentResolver().delete(uri, null, null);
+                        return rows > 0;
+                    }
+                }
+            } catch (Exception e) { return false; }
+            return false;
         }
 
 
