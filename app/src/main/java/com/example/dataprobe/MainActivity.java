@@ -95,6 +95,12 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.provider.MediaStore;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -1880,6 +1886,98 @@ public class MainActivity extends AppCompatActivity {
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(i);
             } catch (Exception ignored) {}
+        }
+
+
+        @JavascriptInterface
+        public String backupApp(String pkg) {
+            try {
+                PackageManager pm = getPackageManager();
+                ApplicationInfo app = pm.getApplicationInfo(pkg, 0);
+                String sourceDir = app.sourceDir;
+                File sourceFile = new File(sourceDir);
+                if (!sourceFile.exists()) return "Error: Source APK not found";
+
+                String appName = pm.getApplicationLabel(app).toString().replaceAll("[^a-zA-Z0-9.-]", "_");
+                String versionName = pm.getPackageInfo(pkg, 0).versionName;
+                String fileName = appName + "_v" + versionName + ".apk";
+
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
+                    values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Probe Backup");
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri != null) {
+                        try (InputStream in = new FileInputStream(sourceFile);
+                             OutputStream out = getContentResolver().openOutputStream(uri)) {
+                            byte[] buf = new byte[8192];
+                            int len;
+                            while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                        }
+                        return "Download/Probe Backup/" + fileName;
+                    }
+                } else {
+                    if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                        return "Permission required. Please grant storage access.";
+                    }
+                    File backupDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Probe Backup");
+                    if (!backupDir.exists()) backupDir.mkdirs();
+                    File dest = new File(backupDir, fileName);
+                    try (InputStream in = new FileInputStream(sourceFile);
+                         OutputStream out = new FileOutputStream(dest)) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                    }
+                    return "Download/Probe Backup/" + fileName;
+                }
+            } catch (Exception e) {
+                return "Error: " + e.getMessage();
+            }
+            return "Error: Unknown";
+        }
+
+        @JavascriptInterface
+        public String getBackedUpApps() {
+            JSONArray arr = new JSONArray();
+            try {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                    String[] projection = { MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE };
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + "=?";
+                    String[] selectionArgs = { Environment.DIRECTORY_DOWNLOADS + "/Probe Backup/" };
+                    try (Cursor cursor = getContentResolver().query(collection, projection, selection, selectionArgs, null)) {
+                        if (cursor != null) {
+                            while (cursor.moveToNext()) {
+                                String name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME));
+                                if (name != null && name.endsWith(".apk")) {
+                                    JSONObject o = new JSONObject();
+                                    o.put("Name", name.replace(".apk", ""));
+                                    o.put("Path", "Download/Probe Backup/" + name);
+                                    o.put("Size", humanBytes(cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE))));
+                                    arr.put(o);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Probe Backup");
+                    if (dir.exists()) {
+                        File[] files = dir.listFiles((d, n) -> n.endsWith(".apk"));
+                        if (files != null) {
+                            for (File f : files) {
+                                JSONObject o = new JSONObject();
+                                o.put("Name", f.getName().replace(".apk", ""));
+                                o.put("Path", "Download/Probe Backup/" + f.getName());
+                                o.put("Size", humanBytes(f.length()));
+                                arr.put(o);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
         }
 
         @JavascriptInterface

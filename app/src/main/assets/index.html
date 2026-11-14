@@ -1159,6 +1159,7 @@
       <button class="btn" data-filter="user">User apps</button>
       <button class="btn" data-filter="system">System apps</button>
       <button class="btn" data-filter="all">All</button>
+      <button class="btn" data-filter="backedup">Backed up</button>
     </div>
     <div id="appsGrid"></div>
   </section>
@@ -1183,6 +1184,10 @@
       <button class="sheet-action" id="sheetBtnInfo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         <span>App info</span>
+      </button>
+      <button class="sheet-action" id="sheetBtnBackup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Backup APK</span>
       </button>
       <button class="sheet-action danger" id="sheetBtnUninstall">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -3706,9 +3711,24 @@
       document.querySelectorAll("#appFilters button").forEach(x => {
         x.classList.toggle("btn-primary", x === b);
       });
-      if (appsCache) renderApps(appsCache, currentFilter);
+      if (currentFilter === "backedup") {
+        loadBackedUpApps();
+      } else if (appsCache) {
+        renderApps(appsCache, currentFilter);
+      }
     });
   });
+
+  function loadBackedUpApps() {
+    const arr = safeJSON(Android.getBackedUpApps(), []);
+    $("appsGrid").innerHTML = arr.length
+      ? '<div class="app-grid">' + arr.map(a => {
+          const fallback = '<div class="fallback" style="background:#1e2c4a;color:#cfe0ff;font-size:11px;">APK</div>';
+          return '<div class="app-tile" title="' + esc(a.Path) + '">' +
+                 fallback + '<div class="label">' + esc(a.Name) + '</div></div>';
+        }).join("") + '</div>'
+      : '<div class="empty">No backups found yet. Tap any app and select "Backup APK".</div>';
+  }
 
   function renderApps(apps, filter) {
     const list = apps.filter(a => filter === "all" || a.Type === filter);
@@ -3780,6 +3800,18 @@
     if (!currentSheetPkg) return;
     Android.openAppInfo(currentSheetPkg);
     closeAppSheet();
+  });
+
+  document.getElementById("sheetBtnBackup").addEventListener("click", () => {
+    if (!currentSheetPkg) return;
+    closeAppSheet();
+    const result = Android.backupApp(currentSheetPkg);
+    if (result.startsWith("Error") || result.startsWith("Permission")) {
+      alert(result);
+    } else {
+      alert("Backup successful!\n\nSaved to:\n" + result);
+      if (currentFilter === "backedup") loadBackedUpApps();
+    }
   });
 
   document.getElementById("sheetBtnUninstall").addEventListener("click", () => {
