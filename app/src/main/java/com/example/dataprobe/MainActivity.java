@@ -2074,36 +2074,9 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
         }
 
-        @JavascriptInterface
-        public void installBackedUpApk(String uriString) {
-            try {
-                Uri uri = Uri.parse(uriString);
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setDataAndType(uri, "application/vnd.android.package-archive");
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                startActivity(i);
-            } catch (Exception e) {
-                webView.post(() -> webView.evaluateJavascript(
-                    "alert('Install failed: " + e.getMessage().replace("'", "\\'") + "')", null));
-            }
-        }
 
-        @JavascriptInterface
-        public boolean deleteBackedUpApk(String uriString) {
-            try {
-                Uri uri = Uri.parse(uriString);
-                if ("file".equals(uri.getScheme())) {
-                    File f = new File(uri.getPath());
-                    return f.delete();
-                } else {
-                    int rows = getContentResolver().delete(uri, null, null);
-                    return rows > 0;
-                }
-            } catch (Exception e) {
-                return false;
-            }
-        }
+
+
 
 
         @JavascriptInterface
